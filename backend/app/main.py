@@ -18,6 +18,7 @@ setup_logging()
 
 from app.core import init_db, get_async_session
 from app.models import UserORM
+from app.api.auth import router as auth_router
 from app.api.reports import router as reports_router
 from app.api.users import router as users_router
 from app.api.market import router as market_router
@@ -115,6 +116,7 @@ app.add_middleware(
 )
 
 # Routers
+app.include_router(auth_router)
 app.include_router(reports_router)
 app.include_router(users_router)
 app.include_router(market_router)

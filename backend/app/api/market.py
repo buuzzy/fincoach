@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import get_db
+from app.core.auth import get_current_user
 from app.models import MarketDataORM, CandleBar, MarketDataResponse
 
 router = APIRouter(prefix="/api/market-data", tags=["market"])
@@ -20,6 +21,7 @@ async def get_market_data(
     start: str,
     end: str,
     db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
 ):
     """Return OHLCV candle bars for a stock within a date range.
 

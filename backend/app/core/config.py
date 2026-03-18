@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     QVERIS_API_KEY_5: str = ""
     QVERIS_BASE_URL: str = "https://qveris.ai/api/v1"
 
+    # Auth
+    # 固定账号密码（MVP 阶段）
+    APP_USERNAME: str = "123456"
+    APP_PASSWORD: str = "abc123"
+    # JWT 签名密钥（生产请在 .env 中覆盖）
+    SECRET_KEY: str = "trademind-secret-key-change-in-production"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 天
+
     # Set to true to wipe market_data/trades and re-seed with real K-line data
     FORCE_RESEED: bool = False
 

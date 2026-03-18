@@ -7,14 +7,17 @@ import {
   DatePicker,
   Toast,
   SpinLoading,
+  Dialog,
 } from 'antd-mobile'
 import dayjs from 'dayjs'
 import { getUsers, generateReport, ApiError } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 import type { UserListItem } from '../../types'
 import './index.css'
 
 export default function Home() {
   const navigate = useNavigate()
+  const { logout } = useAuth()
 
   const [users, setUsers] = useState<UserListItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -74,9 +77,33 @@ export default function Home() {
     }
   }
 
+  const handleLogout = () => {
+    Dialog.confirm({
+      content: '确定要退出登录吗？',
+      confirmText: '退出',
+      cancelText: '取消',
+      onConfirm: () => {
+        logout()
+        navigate('/login', { replace: true })
+      },
+    })
+  }
+
   return (
     <div className="home-page">
-      <NavBar back={null}>交易复盘分析</NavBar>
+      <NavBar
+        back={null}
+        right={
+          <span
+            style={{ fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}
+            onClick={handleLogout}
+          >
+            退出
+          </span>
+        }
+      >
+        交易复盘分析
+      </NavBar>
 
       <div className="home-content">
         {loading ? (

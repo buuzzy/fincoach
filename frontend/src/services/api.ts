@@ -7,12 +7,14 @@ import type {
   MarketDataResponse,
 } from '../types'
 
+const TOKEN_KEY = 'tm_access_token'
+
 // ── 错误类型 ────────────────────────────────────────────────────────────────
 
 export class ApiError extends Error {
   constructor(
     message: string,
-    public readonly code: 'network' | 'timeout' | 'server' | 'not_found' | 'client',
+    public readonly code: 'network' | 'timeout' | 'server' | 'not_found' | 'client' | 'unauthorized',
     public readonly status?: number,
     public readonly detail?: string,
   ) {
@@ -39,6 +41,7 @@ function toApiError(err: unknown): ApiError {
   }
 
   const status = axiosErr.response.status
+  if (status === 401) return new ApiError('登录已过期，请重新登录', 'unauthorized', status, detail)
   if (status === 404) return new ApiError(detail ?? '资源不存在', 'not_found', status, detail)
   if (status >= 500) return new ApiError(detail ?? '服务器内部错误，请稍后重试', 'server', status, detail)
   if (status >= 400) return new ApiError(detail ?? '请求参数有误', 'client', status, detail)
@@ -57,10 +60,44 @@ const api = axios.create({
   timeout: 60000,
 })
 
+// 请求拦截：自动携带 token
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => Promise.reject(toApiError(error)),
+  (error) => {
+    const apiErr = toApiError(error)
+    // 401 自动跳回登录页
+    if (apiErr.code === 'unauthorized') {
+      localStorage.removeItem(TOKEN_KEY)
+      window.location.href = '/login'
+    }
+    return Promise.reject(apiErr)
+  },
 )
+
+// ─── Auth ───────────────────────────────────────────────────────────
+
+export interface LoginPayload {
+  username: string
+  password: string
+}
+
+export interface TokenResponse {
+  access_token: string
+  token_type: string
+}
+
+export async function login(payload: LoginPayload): Promise<TokenResponse> {
+  const { data } = await api.post<TokenResponse>('/auth/login', payload)
+  return data
+}
 
 // ─── Users ─────────────────────────────────────────────────────────
 
