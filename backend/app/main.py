@@ -101,10 +101,14 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         content={"detail": "服务器内部错误，请稍后重试", "error": str(exc)},
     )
 
-# CORS — allow all origins for development
+# CORS — allow Cloudflare Pages + localhost dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://fincoach-aee.pages.dev",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
