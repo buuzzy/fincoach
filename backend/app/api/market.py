@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,12 +27,19 @@ async def get_market_data(
         start: YYYY-MM-DD
         end:   YYYY-MM-DD
     """
+    # Parse to date objects so PostgreSQL DATE comparison works correctly
+    try:
+        start_date = date.fromisoformat(start)
+        end_date = date.fromisoformat(end)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="日期格式错误，请使用 YYYY-MM-DD")
+
     stmt = (
         select(MarketDataORM)
         .where(
             MarketDataORM.stock_code == stock_code,
-            MarketDataORM.trade_date >= start,
-            MarketDataORM.trade_date <= end,
+            MarketDataORM.trade_date >= start_date,
+            MarketDataORM.trade_date <= end_date,
         )
         .order_by(MarketDataORM.trade_date)
     )

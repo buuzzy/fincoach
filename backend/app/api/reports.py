@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import traceback
+from datetime import date
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, cast, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import get_db, get_async_session
@@ -45,12 +46,16 @@ async def _run_pipeline(report_id: int, user_id: int, user_name: str) -> None:
 
         try:
             # Fetch trades in period
+            # Cast period dates to ensure correct PostgreSQL DATE/TIMESTAMP comparison
+            period_start = date.fromisoformat(str(report.period_start))
+            period_end = date.fromisoformat(str(report.period_end))
+
             stmt = (
                 select(TradeORM)
                 .where(
                     TradeORM.user_id == user_id,
-                    TradeORM.trade_time >= report.period_start,
-                    TradeORM.trade_time <= report.period_end,
+                    cast(TradeORM.trade_time, Date) >= period_start,
+                    cast(TradeORM.trade_time, Date) <= period_end,
                 )
                 .order_by(TradeORM.trade_time)
             )
@@ -62,8 +67,8 @@ async def _run_pipeline(report_id: int, user_id: int, user_name: str) -> None:
             stmt_md = (
                 select(MarketDataORM)
                 .where(
-                    MarketDataORM.trade_date >= report.period_start,
-                    MarketDataORM.trade_date <= report.period_end,
+                    MarketDataORM.trade_date >= period_start,
+                    MarketDataORM.trade_date <= period_end,
                 )
                 .order_by(MarketDataORM.trade_date)
             )
