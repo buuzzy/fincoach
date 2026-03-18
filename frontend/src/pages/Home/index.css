@@ -1,0 +1,42 @@
+.home-page {
+  min-height: 100vh;
+  background: var(--bg-color);
+}
+
+.home-content {
+  padding: 16px;
+}
+
+.loading-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 60px 0;
+}
+
+.form-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--card-bg);
+  padding: 14px 16px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+.form-label {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.form-value {
+  color: var(--text-secondary);
+}
+
+.generate-btn {
+  margin-top: 24px;
+}
+
+.history-btn {
+  margin-top: 12px;
+}

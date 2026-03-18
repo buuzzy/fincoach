@@ -1,0 +1,175 @@
+.gen-progress {
+  padding: 40px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.gen-progress-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #222;
+  margin-bottom: 32px;
+}
+
+/* Steps list */
+.gen-steps {
+  width: 100%;
+  max-width: 360px;
+}
+
+.gen-step {
+  display: flex;
+  gap: 12px;
+  min-height: 48px;
+}
+
+/* Left column: icon + connector line */
+.gen-step-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 24px;
+  flex-shrink: 0;
+}
+
+.gen-step-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.gen-step.done .gen-step-icon {
+  background: #52c41a;
+  color: #fff;
+}
+
+.gen-step.active .gen-step-icon {
+  background: #1677ff;
+  color: #fff;
+}
+
+.gen-step.pending .gen-step-icon {
+  background: #f0f0f0;
+}
+
+/* Spinning dot for active step */
+.gen-dot-spin {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  animation: gen-pulse 1s ease-in-out infinite;
+}
+
+@keyframes gen-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.6); }
+}
+
+.gen-dot-idle {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ccc;
+}
+
+/* Connector line between steps */
+.gen-step-line {
+  flex: 1;
+  width: 2px;
+  background: #e8e8e8;
+  margin: 3px 0;
+  min-height: 16px;
+}
+
+.gen-step.done .gen-step-line {
+  background: #52c41a;
+}
+
+/* Right column: text + progress bar */
+.gen-step-right {
+  padding-bottom: 20px;
+  flex: 1;
+}
+
+.gen-step-label {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 24px;
+  transition: color 0.3s;
+}
+
+.gen-step.done .gen-step-label  { color: #52c41a; }
+.gen-step.active .gen-step-label { color: #1677ff; }
+.gen-step.pending .gen-step-label { color: #bbb; }
+
+.gen-step-detail {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+  margin-bottom: 6px;
+}
+
+/* Progress bar */
+.gen-bar-track {
+  height: 4px;
+  background: #e8f4ff;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.gen-bar-fill {
+  height: 100%;
+  background: #1677ff;
+  border-radius: 2px;
+  transition: width 0.4s linear;
+}
+
+/* Bottom hint */
+.gen-hint {
+  margin-top: 24px;
+  font-size: 12px;
+  color: #bbb;
+  text-align: center;
+}
+
+/* Failed state */
+.gen-failed-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #fff2f0;
+  border: 2px solid #ff4d4f;
+  color: #ff4d4f;
+  font-size: 22px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.gen-failed-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #ff4d4f;
+  margin-bottom: 8px;
+}
+
+.gen-failed-hint {
+  font-size: 13px;
+  color: #888;
+  text-align: center;
+  line-height: 1.6;
+  max-width: 260px;
+}

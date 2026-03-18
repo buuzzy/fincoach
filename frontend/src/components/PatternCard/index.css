@@ -1,0 +1,45 @@
+.pattern-card {
+  margin-bottom: 12px;
+}
+
+.pattern-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pattern-icon {
+  font-size: 20px;
+}
+
+.pattern-name {
+  font-size: 15px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.pattern-desc {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.pattern-impact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.positive {
+  color: var(--success-color);
+}
+
+.negative {
+  color: var(--danger-color);
+}

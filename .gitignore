@@ -1,0 +1,44 @@
+# ── Python ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# ── 环境变量（含密钥，绝不提交）────────────────────────
+backend/.env
+backend/.env.local
+backend/.env.*.local
+
+# ── 数据库文件 ───────────────────────────────────────────
+backend/*.db
+backend/test_*.db
+
+# ── 日志 ────────────────────────────────────────────────
+backend/logs/
+
+# ── Node / 前端 ──────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# ── IDE / OS ─────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── pytest ───────────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.coverage
+.claude/
