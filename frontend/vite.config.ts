@@ -11,5 +11,9 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
+  },
+  define: {
+    // Expose env variable to the app bundle
+    __API_BASE_URL__: JSON.stringify(process.env.VITE_API_BASE_URL ?? ''),
   }
 })
