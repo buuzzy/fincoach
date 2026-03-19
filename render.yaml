@@ -5,7 +5,7 @@ services:
     region: singapore          # 最近东京 Supabase 的节点
     plan: free
     rootDir: backend
-    buildCommand: pip install --no-cache-dir -r requirements-prod.txt
+    buildCommand: pip install -r requirements-prod.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
