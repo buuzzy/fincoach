@@ -1,8 +1,8 @@
 .backtest-swiper-wrapper {
-  border-radius: 12px;
+  border-radius: var(--card-radius);
   overflow: hidden;
-  background: #fff;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
 }
 
 /* Dot indicators */
@@ -17,12 +17,12 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #ddd;
+  background: var(--border-color);
   transition: background 0.2s, transform 0.2s;
 }
 
 .backtest-swiper-dot.active {
-  background: #52c41a;
+  background: var(--success-color);
   transform: scale(1.3);
 }
 
@@ -50,12 +50,12 @@
 .backtest-slide-name {
   font-size: 15px;
   font-weight: 600;
-  color: #222;
+  color: var(--text-primary);
 }
 
 .backtest-slide-param {
   font-size: 11px;
-  color: #aaa;
+  color: var(--text-tertiary);
   white-space: nowrap;
   padding-top: 3px;
 }
@@ -63,7 +63,7 @@
 /* LLM design rationale */
 .backtest-slide-rationale {
   font-size: 12px;
-  color: #777;
+  color: var(--text-secondary);
   margin: 0 0 10px;
   line-height: 1.55;
 }
@@ -74,7 +74,7 @@
   align-items: center;
   gap: 6px;
   padding: 10px 0;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--border-color);
   margin-bottom: 12px;
 }
 
@@ -87,13 +87,13 @@
 }
 
 .backtest-pnl-block.backtest-pnl-improve {
-  border-left: 1px solid #f0f0f0;
+  border-left: 1px solid var(--border-color);
   padding-left: 6px;
 }
 
 .backtest-pnl-label {
   font-size: 10px;
-  color: #bbb;
+  color: var(--text-tertiary);
   white-space: nowrap;
 }
 
@@ -105,7 +105,7 @@
 
 .backtest-pnl-divider {
   font-size: 16px;
-  color: #ddd;
+  color: var(--border-color);
   flex-shrink: 0;
   padding-top: 12px;
 }
@@ -117,12 +117,12 @@
 
 .backtest-improve-pct {
   font-size: 11px;
-  color: #999;
+  color: var(--text-tertiary);
 }
 
 /* Chart container inside card */
 .backtest-chart-inner {
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--border-color);
   padding-top: 4px;
   margin-bottom: 10px;
 }
@@ -133,11 +133,11 @@
   background: #f6ffed;
   border-radius: 6px;
   font-size: 12px;
-  color: #555;
+  color: var(--text-secondary);
   line-height: 1.6;
-  border-left: 3px solid #52c41a;
+  border-left: 3px solid var(--success-color);
 }
 
 /* colour helpers */
-.bt-positive { color: #52c41a; }
-.bt-negative { color: #ff4d4f; }
+.bt-positive { color: var(--profit-color); }
+.bt-negative { color: var(--loss-color); }

@@ -20,7 +20,7 @@
   align-items: center;
   background: var(--card-bg);
   padding: 14px 16px;
-  border-radius: 8px;
+  border-radius: var(--card-radius);
   margin-bottom: 12px;
 }
 
@@ -54,7 +54,7 @@
   align-items: center;
   background: var(--card-bg);
   padding: 14px 16px;
-  border-radius: 8px;
+  border-radius: var(--card-radius);
   margin-bottom: 12px;
   cursor: pointer;
 }

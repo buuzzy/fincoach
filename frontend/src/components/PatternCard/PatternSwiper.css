@@ -1,9 +1,9 @@
 /* Outer wrapper */
 .pattern-swiper-wrapper {
-  border-radius: 12px;
+  border-radius: var(--card-radius);
   overflow: hidden;
-  background: #fff;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
 }
 
 /* Dot indicators */
@@ -18,12 +18,12 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #ddd;
+  background: var(--border-color);
   transition: background 0.2s, transform 0.2s;
 }
 
 .pattern-swiper-dot.active {
-  background: #1677ff;
+  background: var(--primary-color);
   transform: scale(1.3);
 }
 
@@ -55,12 +55,12 @@
 .pattern-slide-name {
   font-size: 15px;
   font-weight: 600;
-  color: #222;
+  color: var(--text-primary);
 }
 
 .pattern-slide-impact {
   font-size: 12px;
-  color: #888;
+  color: var(--text-secondary);
   white-space: nowrap;
   padding-top: 2px;
 }
@@ -68,7 +68,7 @@
 /* Description */
 .pattern-slide-desc {
   font-size: 12px;
-  color: #777;
+  color: var(--text-secondary);
   margin: 0 0 8px;
   line-height: 1.5;
 }
@@ -76,7 +76,7 @@
 /* Trade label above chart */
 .pattern-slide-trade-label {
   font-size: 11px;
-  color: #999;
+  color: var(--text-tertiary);
   margin-bottom: 4px;
 }
 
@@ -91,10 +91,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f9f9f9;
+  background: var(--bg-color);
   border-radius: 6px;
   font-size: 12px;
-  color: #bbb;
+  color: var(--text-tertiary);
 }
 
 .kline-error {
@@ -103,8 +103,8 @@
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  color: #ccc;
-  background: #fafafa;
+  color: var(--text-tertiary);
+  background: var(--bg-color);
   border-radius: 6px;
 }
 
@@ -114,13 +114,29 @@
   background: #f0f7ff;
   border-radius: 6px;
   font-size: 12px;
-  color: #555;
+  color: var(--text-secondary);
   line-height: 1.6;
-  border-left: 3px solid #1677ff;
+  border-left: 3px solid var(--primary-color);
 }
 
 .kline-card-inner {
   /* no extra padding — slide provides it */
+}
+
+/* Review link */
+.pattern-review-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 0 4px;
+  font-size: 12px;
+  color: var(--primary-color);
+  cursor: pointer;
+}
+
+.pattern-review-link:active {
+  opacity: 0.7;
 }
 
 /* No-kline fallback */
@@ -128,28 +144,13 @@
   padding: 4px 0 10px;
 }
 
-.over-trading-weeks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.week-tag {
-  padding: 2px 8px;
-  background: #f0f0f0;
-  border-radius: 10px;
-  font-size: 12px;
-  color: #666;
-}
-
 .pattern-no-kline-hint {
   padding: 20px 0;
   text-align: center;
   font-size: 12px;
-  color: #ccc;
+  color: var(--text-tertiary);
 }
 
 /* colour helpers */
-.positive { color: #52c41a; }
-.negative { color: #ff4d4f; }
+.positive { color: var(--profit-color); }
+.negative { color: var(--loss-color); }

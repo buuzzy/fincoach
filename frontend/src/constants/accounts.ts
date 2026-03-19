@@ -11,6 +11,10 @@ export interface AccountInfo {
   tradePairs: number
 }
 
+// Mock 数据覆盖的时段范围
+export const DATA_PERIOD_START = '2026-01-14'
+export const DATA_PERIOD_END = '2026-03-14'
+
 // 数据来源：从 Supabase mock 数据实际计算的真实值（2026-01-14 ~ 2026-03-14）
 export const ACCOUNTS: AccountInfo[] = [
   {

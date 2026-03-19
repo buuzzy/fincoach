@@ -4,6 +4,7 @@
   --card-bg: #ffffff;
   --text-primary: #1a1a2e;
   --text-secondary: #666;
+  --text-tertiary: #999;
   --success-color: #52c41a;
   --danger-color: #ff4d4f;
   --warning-color: #faad14;
@@ -11,6 +12,8 @@
   --loss-color: #ff4d4f;
   --border-color: #f0f0f0;
   --brand-color: #4f9cf9;
+  --card-radius: 10px;
+  --card-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 * {
@@ -29,4 +32,5 @@ html, body {
 
 #root {
   min-height: 100vh;
+  padding-bottom: env(safe-area-inset-bottom);
 }

@@ -60,14 +60,18 @@ def detect_patterns(
         pnl = sell_t.pnl or 0.0
         pnl_pct = sell_t.pnl_pct or 0.0
 
+        buy_trade_id = buy_t.id or 0
+        sell_trade_id = sell_t.id or 0
+
         # 1. chase_high — buy price > 5% above 5-day avg close
         avg5 = get_avg_close(plist, buy_date, 5)
         if avg5 is not None and buy_t.price > avg5 * 1.05:
-            trade_id = buy_t.id or 0
-            chase_high_ids.append(trade_id)
+            chase_high_ids.append(buy_trade_id)
             chase_high_impact += pnl
             chase_high_examples.append({
-                "trade_id": trade_id,
+                "trade_id": buy_trade_id,
+                "buy_trade_id": buy_trade_id,
+                "sell_trade_id": sell_trade_id,
                 "stock": f"{buy_t.stock_code} {buy_t.stock_name}",
                 "buy_date": buy_date.isoformat(),
                 "sell_date": sell_date.isoformat(),
@@ -81,12 +85,13 @@ def detect_patterns(
         if 1 < pnl_pct < 5:
             future_close = get_future_close(plist, sell_date, 5)
             if future_close is not None and future_close > sell_t.price * 1.05:
-                trade_id = sell_t.id or 0
                 missed = (future_close - sell_t.price) * sell_t.quantity
-                early_profit_ids.append(trade_id)
+                early_profit_ids.append(sell_trade_id)
                 early_profit_impact += missed
                 early_profit_examples.append({
-                    "trade_id": trade_id,
+                    "trade_id": sell_trade_id,
+                    "buy_trade_id": buy_trade_id,
+                    "sell_trade_id": sell_trade_id,
                     "stock": f"{sell_t.stock_code} {sell_t.stock_name}",
                     "buy_date": buy_date.isoformat(),
                     "sell_date": sell_date.isoformat(),
@@ -98,11 +103,12 @@ def detect_patterns(
 
         # 3. slow_stop_loss — sell with pnl_pct < -8%
         if pnl_pct < -8:
-            trade_id = sell_t.id or 0
-            slow_stop_ids.append(trade_id)
+            slow_stop_ids.append(sell_trade_id)
             slow_stop_impact += pnl
             slow_stop_examples.append({
-                "trade_id": trade_id,
+                "trade_id": sell_trade_id,
+                "buy_trade_id": buy_trade_id,
+                "sell_trade_id": sell_trade_id,
                 "stock": f"{sell_t.stock_code} {sell_t.stock_name}",
                 "buy_date": buy_date.isoformat(),
                 "sell_date": sell_date.isoformat(),
@@ -115,11 +121,12 @@ def detect_patterns(
 
         # 5. hold_too_long — holding > 20 trading days with negative pnl
         if holding_days > 20 and pnl < 0:
-            trade_id = sell_t.id or 0
-            hold_too_long_ids.append(trade_id)
+            hold_too_long_ids.append(sell_trade_id)
             hold_too_long_impact += pnl
             hold_too_long_examples.append({
-                "trade_id": trade_id,
+                "trade_id": sell_trade_id,
+                "buy_trade_id": buy_trade_id,
+                "sell_trade_id": sell_trade_id,
                 "stock": f"{sell_t.stock_code} {sell_t.stock_name}",
                 "buy_date": buy_date.isoformat(),
                 "sell_date": sell_date.isoformat(),
@@ -152,10 +159,13 @@ def detect_patterns(
             round_trip_fee = buy_fee(buy_amount) + sell_fee(sell_amount)
 
             if holding_days < 5 and abs(pnl) < round_trip_fee * 2:
-                trade_id = sell_t.id or 0
-                fee_drag_ids.append(trade_id)
+                b_id = buy_t.id or 0
+                s_id = sell_t.id or 0
+                fee_drag_ids.append(s_id)
                 fee_drag_examples.append({
-                    "trade_id": trade_id,
+                    "trade_id": s_id,
+                    "buy_trade_id": b_id,
+                    "sell_trade_id": s_id,
                     "stock": f"{sell_t.stock_code} {sell_t.stock_name}",
                     "buy_date": buy_t.trade_time.date().isoformat(),
                     "sell_date": sell_t.trade_time.date().isoformat(),

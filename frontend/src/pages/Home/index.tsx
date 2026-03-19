@@ -11,7 +11,7 @@ import {
   ErrorBlock,
 } from 'antd-mobile'
 import dayjs from 'dayjs'
-import { ACCOUNT_MAP } from '../../constants/accounts'
+import { ACCOUNT_MAP, DATA_PERIOD_START, DATA_PERIOD_END, formatPnl } from '../../constants/accounts'
 import { getClosedTrades } from '../../services/api'
 import type { ClosedTrade } from '../../types'
 import './index.css'
@@ -22,9 +22,8 @@ export default function Home() {
   const userIdNum = Number(userId)
   const account = ACCOUNT_MAP[userIdNum]
 
-  // Data covers 2026-01-14 ~ 2026-03-14
-  const [periodStart, setPeriodStart] = useState<Date>(dayjs('2026-01-14').toDate())
-  const [periodEnd, setPeriodEnd] = useState<Date>(dayjs('2026-03-14').toDate())
+  const [periodStart, setPeriodStart] = useState<Date>(dayjs(DATA_PERIOD_START).toDate())
+  const [periodEnd, setPeriodEnd] = useState<Date>(dayjs(DATA_PERIOD_END).toDate())
   const [showStartPicker, setShowStartPicker] = useState(false)
   const [showEndPicker, setShowEndPicker] = useState(false)
 
@@ -196,9 +195,7 @@ export default function Home() {
                       extra={
                         <div className="trade-item-right">
                           <span style={{ color: pnlColor, fontWeight: 600 }}>
-                            {pnlSign}{trade.pnl >= 0
-                              ? `+¥${Math.abs(trade.pnl).toFixed(0)}`
-                              : `-¥${Math.abs(trade.pnl).toFixed(0)}`}
+                            {formatPnl(trade.pnl)}
                           </span>
                           <span className="trade-item-pct" style={{ color: pnlColor }}>
                             {pnlSign}{trade.pnl_pct.toFixed(2)}%

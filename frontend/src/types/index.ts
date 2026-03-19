@@ -6,7 +6,6 @@ export type PatternType =
   | 'chase_high'
   | 'early_profit'
   | 'slow_stop_loss'
-  | 'over_trading'
   | 'hold_too_long'
   | 'fee_drag'
 
@@ -45,6 +44,8 @@ export interface UserProfile {
 
 export interface PatternExampleBase {
   trade_id: number
+  buy_trade_id?: number
+  sell_trade_id?: number
   stock: string
   buy_date: string
   sell_date: string
@@ -132,13 +133,6 @@ export interface ReportListItem {
   total_pnl?: number | null
   win_rate?: number | null
   trade_count?: number | null
-}
-
-export interface UserListItem {
-  id: number
-  name: string
-  profile_type?: UserProfileType | null
-  trade_count: number
 }
 
 // ─── Market Data ────────────────────────────────────────────────────

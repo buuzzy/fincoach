@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Swiper, Tag } from 'antd-mobile'
 import type { PatternResult, PatternExampleBase } from '../../types'
 import KLineCard from '../KLineCarousel/KLineCard'
@@ -12,7 +13,6 @@ const patternColorMap: Record<string, string> = {
   chase_high: '#ff4d4f',
   early_profit: '#faad14',
   slow_stop_loss: '#ff7a45',
-  over_trading: '#722ed1',
   hold_too_long: '#13c2c2',
   fee_drag: '#eb2f96',
 }
@@ -21,12 +21,12 @@ const patternIconMap: Record<string, string> = {
   chase_high: '📈',
   early_profit: '💰',
   slow_stop_loss: '🐌',
-  over_trading: '⚡',
   hold_too_long: '⏰',
   fee_drag: '💸',
 }
 
 export default function PatternSwiper({ patterns }: Props) {
+  const navigate = useNavigate()
   const [activeIndex, setActiveIndex] = useState(0)
 
   if (!patterns || patterns.length === 0) return null
@@ -105,18 +105,17 @@ export default function PatternSwiper({ patterns }: Props) {
                       aiCommentary={pattern.ai_commentary}
                       active={activeIndex === slideIdx}
                     />
-                  </>
-                ) : (
-                  // over_trading 或无日期数据的 pattern：展示周次统计 + AI 点评兜底
-                  <div className="pattern-no-kline">
-                    {/* 频繁交易周次列表 */}
-                    {pattern.pattern_type === 'over_trading' && pattern.examples[0] && (
-                      <div className="over-trading-weeks">
-                        {((pattern.examples[0]['weeks'] ?? []) as string[]).map((w: string) => (
-                          <span key={w} className="week-tag">{w}</span>
-                        ))}
+                    {example.buy_trade_id && example.sell_trade_id && (
+                      <div
+                        className="pattern-review-link"
+                        onClick={() => navigate(`/trade-review/${example.buy_trade_id}/${example.sell_trade_id}`)}
+                      >
+                        查看详细复盘 &gt;
                       </div>
                     )}
+                  </>
+                ) : (
+                  <div className="pattern-no-kline">
                     {pattern.ai_commentary ? (
                       <div className="kline-ai-commentary">💡 {pattern.ai_commentary}</div>
                     ) : (

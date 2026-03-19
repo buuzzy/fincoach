@@ -1,7 +1,5 @@
 import axios, { AxiosError } from 'axios'
 import type {
-  UserListItem,
-  UserProfile,
   ReportResponse,
   ReportListItem,
   MarketDataResponse,
@@ -74,18 +72,6 @@ export interface LoginPayload {
 
 export async function login(payload: LoginPayload): Promise<void> {
   await api.post('/auth/login', payload)
-}
-
-// ─── Users ─────────────────────────────────────────────────────────
-
-export async function getUsers(): Promise<UserListItem[]> {
-  const { data } = await api.get<UserListItem[]>('/users/')
-  return data
-}
-
-export async function getUserProfile(userId: number): Promise<UserProfile> {
-  const { data } = await api.get<UserProfile>(`/users/${userId}/profile`)
-  return data
 }
 
 // ─── Reports ───────────────────────────────────────────────────────

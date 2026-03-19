@@ -48,7 +48,9 @@ export default function Report() {
   const [fetchError, setFetchError] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string>('')
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollCountRef = useRef(0)
   const startedAtRef = useRef<number>(Date.now())
+  const MAX_POLL_COUNT = 60
 
   useEffect(() => {
     // ── Pending mode: id === 'pending', need to call generate first ──
@@ -73,20 +75,34 @@ export default function Report() {
 
     if (!id) return
 
+    const stopPolling = () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+    }
+
     const fetchReport = async () => {
+      pollCountRef.current += 1
+
+      if (pollCountRef.current > MAX_POLL_COUNT) {
+        stopPolling()
+        setErrorMessage('报告生成超时，请稍后重试')
+        setFetchError(true)
+        setLoading(false)
+        Toast.show({ icon: 'fail', content: '报告生成超时', duration: 3000 })
+        return
+      }
+
       try {
         const data = await getReport(Number(id))
         setReport(data)
 
         if (data.status === 'completed' || data.status === 'failed') {
           setLoading(false)
-          if (pollingRef.current) {
-            clearInterval(pollingRef.current)
-            pollingRef.current = null
-          }
+          stopPolling()
         }
       } catch (err) {
-        // 网络/服务异常：停止轮询，显示失败状态
         const msg =
           err instanceof ApiError
             ? err.message
@@ -94,10 +110,7 @@ export default function Report() {
         setErrorMessage(msg)
         setFetchError(true)
         setLoading(false)
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current)
-          pollingRef.current = null
-        }
+        stopPolling()
         Toast.show({ icon: 'fail', content: msg, duration: 3000 })
       }
     }
@@ -105,9 +118,7 @@ export default function Report() {
     fetchReport()
     pollingRef.current = setInterval(fetchReport, 3000)
 
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current)
-    }
+    return () => { stopPolling() }
   }, [id, location.state])
 
   const statusInfo = STATUS_MAP[report?.status ?? 'pending']

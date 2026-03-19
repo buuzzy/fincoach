@@ -65,7 +65,7 @@
 .account-dot.active {
   width: 18px;
   opacity: 1;
-  background: var(--color-primary, #3d7eff);
+  background: var(--primary-color, #3d7eff);
 }
 
 /* ── Account card ── */
@@ -86,7 +86,7 @@
 }
 
 .account-card.dragging {
-  border-color: var(--color-primary, #3d7eff);
+  border-color: var(--primary-color, #3d7eff);
   box-shadow: 0 8px 32px rgba(61, 126, 255, 0.25);
   opacity: 0.92;
 }
@@ -166,8 +166,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.account-metric-val.positive { color: #f53f3f; }
-.account-metric-val.negative { color: #00b578; }
+.account-metric-val.positive { color: var(--profit-color); }
+.account-metric-val.negative { color: var(--loss-color); }
 .account-metric-val.neutral  { color: var(--text-primary, #e8eaf0); }
 
 .account-metric-label {
@@ -224,7 +224,7 @@
 .sort-item:active { cursor: grabbing; }
 
 .sort-item.sort-dragging {
-  border-color: var(--color-primary, #3d7eff);
+  border-color: var(--primary-color, #3d7eff);
   box-shadow: 0 4px 20px rgba(61,126,255,0.2);
   opacity: 0.9;
   z-index: 999;
