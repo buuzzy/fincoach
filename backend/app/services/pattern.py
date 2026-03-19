@@ -276,17 +276,6 @@ def detect_patterns(
             examples=slow_stop_examples[:3],
         ))
 
-    if over_trading_weeks:
-        results.append(PatternResult(
-            pattern_type=PatternType.OVER_TRADING,
-            pattern_name="频繁交易",
-            occurrences=len(over_trading_weeks),
-            affected_trades=over_trading_trade_ids,
-            total_impact=0.0,
-            description=f"连续{len(over_trading_weeks)}周每周交易超过5次",
-            examples=[{"weeks": over_trading_weeks[:5]}],
-        ))
-
     if hold_too_long_ids:
         hold_too_long_examples.sort(key=lambda x: abs(x.get("pnl", 0)), reverse=True)
         results.append(PatternResult(
