@@ -457,9 +457,9 @@ def _fallback_report(
             suggestion_lines.append(
                 "3. 严格止损纪律：建议将止损线设置在-6%，亏损达到止损线时果断执行。"
             )
-        elif ptype == "over_trading":
+        elif ptype == "fee_drag":
             suggestion_lines.append(
-                "4. 控制交易频率：建议每周交易不超过3次，减少手续费和情绪干扰。"
+                "4. 降低短线交易频率：部分短线交易的盈亏未能覆盖手续费成本，建议减少持仓不足5天的操作。"
             )
         elif ptype == "hold_too_long":
             suggestion_lines.append(
@@ -766,7 +766,7 @@ async def _run_tool_use_agent(
             "content": (
                 "已达到工具调用上限，请根据已获取的所有数据立即生成最终报告，"
                 '以JSON格式返回：{"summary": "...", "suggestions": "...", '
-                '"style_description": "...", "pattern_examples": {...}}。'
+                '"style_description": "...", "pattern_examples": {...}, "backtest_interpretations": {...}}。'
             ),
         }
     )

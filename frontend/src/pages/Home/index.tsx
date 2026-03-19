@@ -15,7 +15,6 @@ export default function Home() {
   const userIdNum = Number(userId)
   const account = ACCOUNT_MAP[userIdNum]
 
-  const [generating, setGenerating] = useState(false)  // kept for future use
   // MVP: mock data covers 2025-01-01 ~ 2025-03-31
   const [periodStart, setPeriodStart] = useState<Date>(dayjs('2025-01-01').toDate())
   const [periodEnd, setPeriodEnd] = useState<Date>(dayjs('2025-03-31').toDate())

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import timedelta
 
 from app.models import (
     TradeRecord,
@@ -66,16 +65,6 @@ def _get_future_close(
     if len(future) < days_ahead:
         return None
     return future[days_ahead - 1].close_price
-
-
-def _get_close_on_date(
-    price_list: list[MarketData],
-    target_date,
-) -> float | None:
-    for m in price_list:
-        if m.trade_date == target_date:
-            return m.close_price
-    return None
 
 
 # ─── pair buy/sell helper ───────────────────────────────────────────

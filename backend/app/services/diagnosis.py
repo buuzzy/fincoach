@@ -12,8 +12,8 @@ _PATTERN_LABELS: dict[str, str] = {
     "chase_high": "追高买入",
     "early_profit": "止盈过早",
     "slow_stop_loss": "止损过慢",
-    "over_trading": "频繁交易",
     "hold_too_long": "持仓过久",
+    "fee_drag": "手续费侵蚀",
 }
 
 
