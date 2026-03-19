@@ -1,28 +1,28 @@
-import { useState } from 'react'
 import { Swiper, Tag } from 'antd-mobile'
 import type { BacktestScenario } from '../../types'
+import BacktestChart from './BacktestChart'
 import './BacktestSwiper.css'
 
 interface Props {
   scenarios: BacktestScenario[]
   bestScenario: string
-  onActiveChange?: (scenarioName: string) => void
 }
 
-export default function BacktestSwiper({ scenarios, bestScenario, onActiveChange }: Props) {
-  const [activeIndex, setActiveIndex] = useState(0)
-
-  if (!scenarios || scenarios.length === 0) return null
-
-  const handleIndexChange = (idx: number) => {
-    setActiveIndex(idx)
-    onActiveChange?.(scenarios[idx]?.name ?? '')
+/** Format PnL with adaptive unit: 万 above 10,000 */
+function fmtPnl(v: number): string {
+  const abs = Math.abs(v)
+  if (abs >= 10000) {
+    return `${v >= 0 ? '+' : ''}${(v / 10000).toFixed(1)}万`
   }
+  return `${v >= 0 ? '+' : ''}${v.toFixed(0)}`
+}
+
+export default function BacktestSwiper({ scenarios, bestScenario }: Props) {
+  if (!scenarios || scenarios.length === 0) return null
 
   return (
     <div className="backtest-swiper-wrapper">
       <Swiper
-        onIndexChange={handleIndexChange}
         indicator={(total, current) => (
           <div className="backtest-swiper-dots">
             {Array.from({ length: total }).map((_, i) => (
@@ -37,13 +37,12 @@ export default function BacktestSwiper({ scenarios, bestScenario, onActiveChange
         {scenarios.map((scenario) => {
           const isBest = scenario.name === bestScenario
           const improved = scenario.improvement > 0
-          const improvePct = scenario.improvement_pct
 
           return (
             <Swiper.Item key={scenario.name}>
               <div className="backtest-slide">
 
-                {/* Header */}
+                {/* ── Header ── */}
                 <div className="backtest-slide-header">
                   <div className="backtest-slide-title">
                     <span className="backtest-slide-name">{scenario.name}</span>
@@ -64,39 +63,46 @@ export default function BacktestSwiper({ scenarios, bestScenario, onActiveChange
                   <span className="backtest-slide-param">{scenario.param_change}</span>
                 </div>
 
-                {/* LLM design rationale */}
+                {/* ── LLM design rationale ── */}
                 {scenario.description && (
                   <p className="backtest-slide-rationale">{scenario.description}</p>
                 )}
 
-                {/* PnL comparison */}
+                {/* ── PnL comparison ── */}
                 <div className="backtest-pnl-row">
-                  <div className="backtest-pnl-item">
+                  <div className="backtest-pnl-block">
                     <span className="backtest-pnl-label">原始盈亏</span>
-                    <span className={`backtest-pnl-val ${scenario.original_pnl >= 0 ? 'positive' : 'negative'}`}>
-                      {scenario.original_pnl >= 0 ? '+' : ''}
-                      {scenario.original_pnl.toFixed(0)}
+                    <span className={`backtest-pnl-val ${scenario.original_pnl >= 0 ? 'bt-positive' : 'bt-negative'}`}>
+                      {fmtPnl(scenario.original_pnl)}
                     </span>
                   </div>
-                  <div className="backtest-pnl-arrow">→</div>
-                  <div className="backtest-pnl-item">
+
+                  <div className="backtest-pnl-divider">→</div>
+
+                  <div className="backtest-pnl-block">
                     <span className="backtest-pnl-label">优化后</span>
-                    <span className={`backtest-pnl-val ${scenario.adjusted_pnl >= 0 ? 'positive' : 'negative'}`}>
-                      {scenario.adjusted_pnl >= 0 ? '+' : ''}
-                      {scenario.adjusted_pnl.toFixed(0)}
+                    <span className={`backtest-pnl-val ${scenario.adjusted_pnl >= 0 ? 'bt-positive' : 'bt-negative'}`}>
+                      {fmtPnl(scenario.adjusted_pnl)}
                     </span>
                   </div>
-                  <div className="backtest-pnl-improvement">
-                    <span className={`backtest-improvement-val ${improved ? 'positive' : 'negative'}`}>
-                      {improved ? '▲' : '▼'} {improved ? '+' : ''}{scenario.improvement.toFixed(0)} 元
+
+                  <div className="backtest-pnl-block backtest-pnl-improve">
+                    <span className="backtest-pnl-label">改善</span>
+                    <span className={`backtest-improve-val ${improved ? 'bt-positive' : 'bt-negative'}`}>
+                      {improved ? '▲' : '▼'} {fmtPnl(scenario.improvement)}
                     </span>
-                    <span className="backtest-improvement-pct">
-                      ({improvePct >= 0 ? '+' : ''}{improvePct.toFixed(1)}%)
+                    <span className="backtest-improve-pct">
+                      {scenario.improvement_pct >= 0 ? '+' : ''}{scenario.improvement_pct.toFixed(1)}%
                     </span>
                   </div>
                 </div>
 
-                {/* AI interpretation */}
+                {/* ── Chart — one per scenario ── */}
+                <div className="backtest-chart-inner">
+                  <BacktestChart scenario={scenario} />
+                </div>
+
+                {/* ── AI interpretation ── */}
                 {scenario.ai_interpretation && (
                   <div className="backtest-ai-interpretation">
                     💡 {scenario.ai_interpretation}
