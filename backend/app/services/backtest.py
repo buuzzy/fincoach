@@ -17,57 +17,17 @@ from datetime import timedelta
 from app.models import (
     TradeRecord,
     MarketData,
-    TradeDirection,
     BacktestScenario,
     BacktestScenarioConfig,
     BacktestResult,
 )
-
-# A股手续费常数（与 pattern.py 保持一致）
-_COMMISSION_RATE = 0.0003   # 佣金 0.03%（买卖双向）
-_STAMP_DUTY_RATE  = 0.001   # 印花税 0.10%（仅卖出）
-
-def _buy_fee(amount: float) -> float:
-    return amount * _COMMISSION_RATE
-
-def _sell_fee(amount: float) -> float:
-    return amount * (_COMMISSION_RATE + _STAMP_DUTY_RATE)
-
-
-# ── Market data helpers ──────────────────────────────────────────────────────
-
-def _build_price_map(market_data: list[MarketData]) -> dict[str, list[MarketData]]:
-    by_stock: dict[str, list[MarketData]] = defaultdict(list)
-    for md in market_data:
-        by_stock[md.stock_code].append(md)
-    for code in by_stock:
-        by_stock[code].sort(key=lambda m: m.trade_date)
-    return by_stock
-
-
-def _get_future_close(price_list: list[MarketData], target_date, days_ahead: int) -> float | None:
-    future = [m for m in price_list if m.trade_date > target_date]
-    if len(future) < days_ahead:
-        return None
-    return future[days_ahead - 1].close_price
-
-
-def _get_ma(price_list: list[MarketData], before_date, window: int = 5) -> float | None:
-    prior = [m for m in price_list if m.trade_date < before_date]
-    if len(prior) < window:
-        return None
-    return sum(m.close_price for m in prior[-window:]) / window
-
-
-# ── Trade pairing ────────────────────────────────────────────────────────────
-
-def _pair_trades(trades: list[TradeRecord]):
-    buys: dict[str, list[TradeRecord]] = defaultdict(list)
-    for t in sorted(trades, key=lambda x: x.trade_time):
-        if t.direction == TradeDirection.BUY:
-            buys[t.stock_code].append(t)
-        elif t.direction == TradeDirection.SELL and buys.get(t.stock_code):
-            yield buys[t.stock_code].pop(0), t
+from app.core.constants import buy_fee, sell_fee
+from app.utils.trade_utils import (
+    pair_trades,
+    build_price_map,
+    get_avg_close,
+    get_future_close,
+)
 
 
 # ── Scenario simulators ──────────────────────────────────────────────────────
@@ -115,7 +75,7 @@ def _run_profit_hold_extend(
         # Only apply to profitable exits — these are potential early-profit-take candidates
         if pnl_pct > 0:
             plist = price_map.get(sell_t.stock_code, [])
-            future_close = _get_future_close(plist, sell_t.trade_time.date(), hold_days)
+            future_close = get_future_close(plist, sell_t.trade_time.date(), hold_days)
             if future_close is not None and future_close > sell_price:
                 sim_pnl = (future_close - buy_price) * qty
 
@@ -137,7 +97,7 @@ def _run_chase_high_avoid(
         buy_price = buy_t.price or 0.0
 
         plist = price_map.get(buy_t.stock_code, [])
-        ma5 = _get_ma(plist, buy_t.trade_time.date(), 5)
+        ma5 = get_avg_close(plist, buy_t.trade_time.date(), 5)
         is_chase = ma5 is not None and buy_price > ma5 * ma_multiplier
 
         # Only avoid if it was both a chase AND a losing trade
@@ -240,7 +200,7 @@ def _run_fee_drag_reduce(
 
         buy_amount = buy_price * qty
         sell_amount = (sell_t.price or 0.0) * qty
-        round_trip_fee = _buy_fee(buy_amount) + _sell_fee(sell_amount)
+        round_trip_fee = buy_fee(buy_amount) + sell_fee(sell_amount)
 
         # Skip if this trade didn't cover its own costs AND was short-term
         if holding_days < max_holding_days and abs(pnl) < round_trip_fee * fee_cover_multiplier:
@@ -328,8 +288,8 @@ def run_backtest(
     Falls back to three sensible default scenarios when scenario_configs is None
     (e.g. if the LLM call failed).
     """
-    price_map = _build_price_map(market_data)
-    all_pairs = list(_pair_trades(trades))
+    price_map = build_price_map(market_data)
+    all_pairs = list(pair_trades(trades))
 
     # Default fallback scenarios
     if not scenario_configs:

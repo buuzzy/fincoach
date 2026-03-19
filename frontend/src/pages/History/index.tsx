@@ -4,15 +4,9 @@ import { NavBar, SpinLoading, Toast } from 'antd-mobile'
 import dayjs from 'dayjs'
 import { getReports } from '../../services/api'
 import { ACCOUNT_MAP } from '../../constants/accounts'
+import { STATUS_MAP } from '../../constants/status'
 import type { ReportListItem } from '../../types'
 import './index.css'
-
-const statusMap: Record<string, { text: string; color: string }> = {
-  pending:    { text: '等待中', color: '#aaa'     },
-  generating: { text: '生成中', color: '#fa8c16'  },
-  completed:  { text: '已完成', color: '#52c41a'  },
-  failed:     { text: '失败',   color: '#ff4d4f'  },
-}
 
 export default function History() {
   const navigate = useNavigate()
@@ -41,7 +35,7 @@ export default function History() {
         ) : (
           <div className="report-list">
             {reports.map((r) => {
-              const status = statusMap[r.status] ?? statusMap.pending
+              const status = STATUS_MAP[r.status] ?? STATUS_MAP.pending
               const hasPnl = r.total_pnl != null
               const pnlPositive = (r.total_pnl ?? 0) >= 0
               const account = ACCOUNT_MAP[r.user_id]
@@ -64,7 +58,7 @@ export default function History() {
                         <span className="rc-broker">未知账户</span>
                       )}
                     </div>
-                    <span className="rc-status" style={{ color: status.color }}>
+                    <span className="rc-status" style={{ color: status.hexColor }}>
                       {status.text}
                     </span>
                   </div>

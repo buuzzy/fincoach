@@ -1,20 +1,12 @@
 import { Swiper, Tag } from 'antd-mobile'
 import type { BacktestScenario } from '../../types'
+import { formatPnlValue } from '../../constants/accounts'
 import BacktestChart from './BacktestChart'
 import './BacktestSwiper.css'
 
 interface Props {
   scenarios: BacktestScenario[]
   bestScenario: string
-}
-
-/** Format PnL with adaptive unit: 万 above 10,000 */
-function fmtPnl(v: number): string {
-  const abs = Math.abs(v)
-  if (abs >= 10000) {
-    return `${v >= 0 ? '+' : ''}${(v / 10000).toFixed(1)}万`
-  }
-  return `${v >= 0 ? '+' : ''}${v.toFixed(0)}`
 }
 
 export default function BacktestSwiper({ scenarios, bestScenario }: Props) {
@@ -73,7 +65,7 @@ export default function BacktestSwiper({ scenarios, bestScenario }: Props) {
                   <div className="backtest-pnl-block">
                     <span className="backtest-pnl-label">原始盈亏</span>
                     <span className={`backtest-pnl-val ${scenario.original_pnl >= 0 ? 'bt-positive' : 'bt-negative'}`}>
-                      {fmtPnl(scenario.original_pnl)}
+                      {formatPnlValue(scenario.original_pnl)}
                     </span>
                   </div>
 
@@ -82,14 +74,14 @@ export default function BacktestSwiper({ scenarios, bestScenario }: Props) {
                   <div className="backtest-pnl-block">
                     <span className="backtest-pnl-label">优化后</span>
                     <span className={`backtest-pnl-val ${scenario.adjusted_pnl >= 0 ? 'bt-positive' : 'bt-negative'}`}>
-                      {fmtPnl(scenario.adjusted_pnl)}
+                      {formatPnlValue(scenario.adjusted_pnl)}
                     </span>
                   </div>
 
                   <div className="backtest-pnl-block backtest-pnl-improve">
                     <span className="backtest-pnl-label">改善</span>
                     <span className={`backtest-improve-val ${improved ? 'bt-positive' : 'bt-negative'}`}>
-                      {improved ? '▲' : '▼'} {fmtPnl(scenario.improvement)}
+                      {improved ? '▲' : '▼'} {formatPnlValue(scenario.improvement)}
                     </span>
                     <span className="backtest-improve-pct">
                       {scenario.improvement_pct >= 0 ? '+' : ''}{scenario.improvement_pct.toFixed(1)}%

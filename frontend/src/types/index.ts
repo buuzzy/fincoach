@@ -50,6 +50,7 @@ export interface PatternExampleBase {
   sell_date: string
   buy_price?: number
   sell_price?: number
+  pnl?: number
   [key: string]: unknown
 }
 
@@ -191,6 +192,12 @@ export interface TradeKlineBar {
   change_pct: number
 }
 
+export interface IndexKlineBar {
+  date: string
+  close: number
+  change_pct: number
+}
+
 export interface TradeReviewResponse {
   buy_trade_id: number
   sell_trade_id: number
@@ -205,6 +212,7 @@ export interface TradeReviewResponse {
   pnl_pct: number
   hold_days: number
   kline: TradeKlineBar[]
+  index_kline: IndexKlineBar[]
   news: TradeNewsItem[]
   status: 'generating' | 'completed' | 'failed'
   ai_review?: string | null

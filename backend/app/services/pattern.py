@@ -2,81 +2,23 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
-
 from app.models import (
     TradeRecord,
     MarketData,
-    TradeDirection,
     PatternType,
     PatternResult,
 )
-
-# ─── A股手续费常数 ──────────────────────────────────────────────────
-# 佣金率（买卖双向，取行业保守估算）
-_COMMISSION_RATE = 0.0003        # 0.03%
-# 印花税（仅卖出方向，固定）
-_STAMP_DUTY_RATE = 0.001         # 0.10%
-# 手续费侵蚀率触发阈值
-_FEE_DRAG_RATIO_THRESHOLD = 0.20  # 手续费 / 毛利润 > 20%
-
-
-def _buy_fee(amount: float) -> float:
-    """估算买入手续费：仅佣金，无印花税。"""
-    return amount * _COMMISSION_RATE
-
-
-def _sell_fee(amount: float) -> float:
-    """估算卖出手续费：佣金 + 印花税。"""
-    return amount * (_COMMISSION_RATE + _STAMP_DUTY_RATE)
-
-
-def _build_price_map(
-    market_data: list[MarketData],
-) -> dict[str, list[MarketData]]:
-    """Return market data sorted by date, keyed by stock_code."""
-    by_stock: dict[str, list[MarketData]] = defaultdict(list)
-    for md in market_data:
-        by_stock[md.stock_code].append(md)
-    for code in by_stock:
-        by_stock[code].sort(key=lambda m: m.trade_date)
-    return by_stock
-
-
-def _get_avg_close(
-    price_list: list[MarketData],
-    target_date,
-    window: int = 5,
-) -> float | None:
-    """Return average close of *window* trading days up to (not including) target_date."""
-    closes = [m.close_price for m in price_list if m.trade_date < target_date]
-    if len(closes) < window:
-        return None
-    return sum(closes[-window:]) / window
-
-
-def _get_future_close(
-    price_list: list[MarketData],
-    target_date,
-    days_ahead: int = 5,
-) -> float | None:
-    """Return the close price *days_ahead* trading days after target_date."""
-    future = [m for m in price_list if m.trade_date > target_date]
-    if len(future) < days_ahead:
-        return None
-    return future[days_ahead - 1].close_price
-
-
-# ─── pair buy/sell helper ───────────────────────────────────────────
-def _pair_trades(trades: list[TradeRecord]):
-    """Yield (buy, sell) pairs matched by stock_code chronologically."""
-    buys: dict[str, list[TradeRecord]] = defaultdict(list)
-    for t in sorted(trades, key=lambda x: x.trade_time):
-        if t.direction == TradeDirection.BUY:
-            buys[t.stock_code].append(t)
-        elif t.direction == TradeDirection.SELL and buys.get(t.stock_code):
-            buy_t = buys[t.stock_code].pop(0)
-            yield buy_t, t
+from app.core.constants import (
+    FEE_DRAG_RATIO_THRESHOLD,
+    buy_fee,
+    sell_fee,
+)
+from app.utils.trade_utils import (
+    pair_trades,
+    build_price_map,
+    get_avg_close,
+    get_future_close,
+)
 
 
 # ─── main entry ─────────────────────────────────────────────────────
@@ -84,7 +26,7 @@ def detect_patterns(
     trades: list[TradeRecord],
     market_data: list[MarketData],
 ) -> list[PatternResult]:
-    price_map = _build_price_map(market_data)
+    price_map = build_price_map(market_data)
 
     chase_high_ids: list[int] = []
     chase_high_impact: float = 0.0
@@ -108,7 +50,7 @@ def detect_patterns(
     fee_drag_ids: list[int] = []
     fee_drag_examples: list[dict] = []
 
-    for buy_t, sell_t in _pair_trades(trades):
+    for buy_t, sell_t in pair_trades(trades):
         code = buy_t.stock_code
         plist = price_map.get(code, [])
         buy_date = buy_t.trade_time.date()
@@ -119,7 +61,7 @@ def detect_patterns(
         pnl_pct = sell_t.pnl_pct or 0.0
 
         # 1. chase_high — buy price > 5% above 5-day avg close
-        avg5 = _get_avg_close(plist, buy_date, 5)
+        avg5 = get_avg_close(plist, buy_date, 5)
         if avg5 is not None and buy_t.price > avg5 * 1.05:
             trade_id = buy_t.id or 0
             chase_high_ids.append(trade_id)
@@ -137,7 +79,7 @@ def detect_patterns(
 
         # 2. early_profit — sell with 1%<pnl_pct<5% when stock rose >5% in next 5 days
         if 1 < pnl_pct < 5:
-            future_close = _get_future_close(plist, sell_date, 5)
+            future_close = get_future_close(plist, sell_date, 5)
             if future_close is not None and future_close > sell_t.price * 1.05:
                 trade_id = sell_t.id or 0
                 missed = (future_close - sell_t.price) * sell_t.quantity
@@ -190,26 +132,24 @@ def detect_patterns(
         # 6. fee_drag — 累计手续费侵蚀统计（已平仓交易）
         buy_amount = buy_t.price * buy_t.quantity
         sell_amount = sell_t.price * sell_t.quantity
-        round_trip_fee = _buy_fee(buy_amount) + _sell_fee(sell_amount)
+        round_trip_fee = buy_fee(buy_amount) + sell_fee(sell_amount)
         total_estimated_fee += round_trip_fee
         if pnl > 0:
             total_gross_profit += pnl
 
     # ── fee_drag：整体手续费侵蚀率超标时，找出「低效短线」交易 ───────
-    # 低效短线 = 持仓 < 5天 AND |盈亏| < 该笔来回手续费 × 2
-    # 触发条件：总手续费 / 总毛利润 > 20%
     fee_drag_ratio = (
         total_estimated_fee / total_gross_profit
         if total_gross_profit > 0 else 0.0
     )
 
-    if fee_drag_ratio > _FEE_DRAG_RATIO_THRESHOLD:
-        for buy_t, sell_t in _pair_trades(trades):
+    if fee_drag_ratio > FEE_DRAG_RATIO_THRESHOLD:
+        for buy_t, sell_t in pair_trades(trades):
             pnl = sell_t.pnl or 0.0
             holding_days = (sell_t.trade_time - buy_t.trade_time).days
             buy_amount = buy_t.price * buy_t.quantity
             sell_amount = sell_t.price * sell_t.quantity
-            round_trip_fee = _buy_fee(buy_amount) + _sell_fee(sell_amount)
+            round_trip_fee = buy_fee(buy_amount) + sell_fee(sell_amount)
 
             if holding_days < 5 and abs(pnl) < round_trip_fee * 2:
                 trade_id = sell_t.id or 0

@@ -55,8 +55,7 @@ export default function PatternSwiper({ patterns }: Props) {
             (ex) => ex.buy_date && ex.sell_date,
           )
 
-          const hasPnl = typeof (example as any)?.pnl === 'number'
-          const pnlVal = hasPnl ? (example as any).pnl as number : null
+          const pnlVal = typeof example?.pnl === 'number' ? example.pnl : null
 
           return (
             <Swiper.Item key={pattern.pattern_type}>
@@ -113,7 +112,7 @@ export default function PatternSwiper({ patterns }: Props) {
                     {/* 频繁交易周次列表 */}
                     {pattern.pattern_type === 'over_trading' && pattern.examples[0] && (
                       <div className="over-trading-weeks">
-                        {((pattern.examples[0] as any).weeks as string[] ?? []).map((w: string) => (
+                        {((pattern.examples[0]['weeks'] ?? []) as string[]).map((w: string) => (
                           <span key={w} className="week-tag">{w}</span>
                         ))}
                       </div>

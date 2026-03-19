@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { NavBar, Toast, Card, Tag, Divider } from 'antd-mobile'
-import { getReport, generateReport } from '../../services/api'
+import { getReport, generateReport, type GenerateReportPayload } from '../../services/api'
 import { ApiError } from '../../services/api'
 import { ACCOUNT_MAP } from '../../constants/accounts'
+import { STATUS_MAP } from '../../constants/status'
 import type { ReportResponse } from '../../types'
 import PatternSwiper from '../../components/PatternCard/PatternSwiper'
 import BacktestSwiper from '../../components/Charts/BacktestSwiper'
@@ -52,7 +53,7 @@ export default function Report() {
   useEffect(() => {
     // ── Pending mode: id === 'pending', need to call generate first ──
     if (id === 'pending') {
-      const params = (location.state as any)?.params
+      const params = (location.state as { params?: GenerateReportPayload } | null)?.params
       if (!params) { navigate('/', { replace: true }); return }
 
       generateReport(params)
@@ -109,14 +110,7 @@ export default function Report() {
     }
   }, [id, location.state])
 
-  const statusMap: Record<string, { text: string; color: string }> = {
-    pending: { text: '等待中', color: 'default' },
-    generating: { text: '生成中', color: 'warning' },
-    completed: { text: '已完成', color: 'success' },
-    failed: { text: '失败', color: 'danger' },
-  }
-
-  const statusInfo = statusMap[report?.status ?? 'pending']
+  const statusInfo = STATUS_MAP[report?.status ?? 'pending']
   const account = report ? ACCOUNT_MAP[report.user_id] : null
 
   return (
@@ -124,14 +118,14 @@ export default function Report() {
       <NavBar onBack={() => navigate(-1)}>
         {account ? `${account.brokerName} ${account.maskedAccount}` : '复盘报告'}
         {report && (
-          <Tag color={statusInfo.color} style={{ marginLeft: 8 }}>
+          <Tag color={statusInfo.tagColor} style={{ marginLeft: 8 }}>
             {statusInfo.text}
           </Tag>
         )}
       </NavBar>
 
       <div className="report-content">
-        {(loading || fetchError || report?.status === 'failed') && !report?.status.match(/completed/) ? (
+        {(loading || fetchError || report?.status === 'failed') && report?.status !== 'completed' ? (
           <GeneratingProgress
             startedAt={startedAtRef.current}
             failed={fetchError || report?.status === 'failed'}

@@ -126,7 +126,7 @@ async def _run_pipeline(report_id: int, user_id: int, user_name: str) -> None:
                 extra={"report_id": report_id, "user_id": user_id},
             )
             report.status = ReportStatus.FAILED
-            report.error_message = tb
+            report.error_message = "分析流程异常，请稍后重试"
             await db.commit()
 
 

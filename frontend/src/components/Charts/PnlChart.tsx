@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import ReactECharts from 'echarts-for-react'
 import type { UserProfile } from '../../types'
 
@@ -6,7 +7,7 @@ interface Props {
 }
 
 export default function PnlChart({ profile }: Props) {
-  const option = {
+  const option = useMemo(() => ({
     tooltip: {
       trigger: 'item' as const,
     },
@@ -55,7 +56,7 @@ export default function PnlChart({ profile }: Props) {
         barWidth: '50%',
       },
     ],
-  }
+  }), [profile.total_pnl, profile.avg_pnl_per_trade, profile.max_single_gain, profile.max_single_loss])
 
   return (
     <ReactECharts

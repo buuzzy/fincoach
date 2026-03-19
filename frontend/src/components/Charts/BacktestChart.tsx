@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react'
 import * as echarts from 'echarts'
 import type { BacktestScenario, BacktestTradeDetail } from '../../types'
+import { formatPnlValue } from '../../constants/accounts'
 
 interface Props {
   scenario: BacktestScenario   // only the active scenario
@@ -36,24 +37,18 @@ export default function BacktestChart({ scenario }: Props) {
       chartInstance.current = echarts.init(chartRef.current, undefined, { renderer: 'svg' })
     }
 
-    const fmt = (v: number) => {
-      const abs = Math.abs(v)
-      if (abs >= 10000) return `${v >= 0 ? '+' : ''}${(v / 10000).toFixed(1)}万`
-      return `${v >= 0 ? '+' : ''}${v.toFixed(0)}`
-    }
-
     const option: echarts.EChartsOption = {
       animation: true,
       tooltip: {
         trigger: 'axis',
-        formatter: (params: any) => {
+        formatter: (params: unknown) => {
           if (!Array.isArray(params) || params.length === 0) return ''
-          const idx = params[0].dataIndex
+          const idx = (params[0] as { dataIndex: number }).dataIndex
           const d = details[idx]
           return [
             `<b>${d?.stock ?? ''} ${labels[idx]}</b>`,
-            `原始累计: <b style="color:${ORIGINAL_COLOR}">${fmt(cumulativeOriginal[idx])}</b>`,
-            `${scenario.name}: <b style="color:${SCENARIO_COLOR}">${fmt(cumulativeAdjusted[idx])}</b>`,
+            `原始累计: <b style="color:${ORIGINAL_COLOR}">${formatPnlValue(cumulativeOriginal[idx])}</b>`,
+            `${scenario.name}: <b style="color:${SCENARIO_COLOR}">${formatPnlValue(cumulativeAdjusted[idx])}</b>`,
           ].join('<br/>')
         },
       },

@@ -7,6 +7,10 @@
   --success-color: #52c41a;
   --danger-color: #ff4d4f;
   --warning-color: #faad14;
+  --profit-color: #52c41a;
+  --loss-color: #ff4d4f;
+  --border-color: #f0f0f0;
+  --brand-color: #4f9cf9;
 }
 
 * {

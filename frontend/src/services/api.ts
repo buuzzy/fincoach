@@ -146,6 +146,7 @@ export async function getTradeReview(
 ): Promise<TradeReviewResponse> {
   const { data } = await api.get<TradeReviewResponse>(
     `/trades/review/${buyTradeId}/${sellTradeId}`,
+    { timeout: 120_000 },
   )
   return data
 }

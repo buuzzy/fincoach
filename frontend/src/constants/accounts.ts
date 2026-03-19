@@ -19,8 +19,8 @@ export const ACCOUNTS: AccountInfo[] = [
     maskedAccount: '****3821',
     logoColor: '#e8652a',
     logoText: '华泰',
-    totalPnl: -18470,
-    winRate: 15.8,
+    totalPnl: -3534,
+    winRate: 42.1,
     tradePairs: 19,
   },
   {
@@ -29,8 +29,8 @@ export const ACCOUNTS: AccountInfo[] = [
     maskedAccount: '****0712',
     logoColor: '#c1272d',
     logoText: '招商',
-    totalPnl: -6856,
-    winRate: 40.0,
+    totalPnl: 86186,
+    winRate: 80.0,
     tradePairs: 10,
   },
   {
@@ -39,8 +39,8 @@ export const ACCOUNTS: AccountInfo[] = [
     maskedAccount: '****5967',
     logoColor: '#e05b16',
     logoText: '东财',
-    totalPnl: -57778,
-    winRate: 11.8,
+    totalPnl: -61148,
+    winRate: 5.9,
     tradePairs: 17,
   },
   {
@@ -49,8 +49,8 @@ export const ACCOUNTS: AccountInfo[] = [
     maskedAccount: '****2483',
     logoColor: '#1a3fa3',
     logoText: '中信',
-    totalPnl: -4342,
-    winRate: 50.0,
+    totalPnl: 34941,
+    winRate: 70.0,
     tradePairs: 10,
   },
   {
@@ -59,8 +59,8 @@ export const ACCOUNTS: AccountInfo[] = [
     maskedAccount: '****8156',
     logoColor: '#0e7a4c',
     logoText: '海通',
-    totalPnl: -3201,
-    winRate: 25.0,
+    totalPnl: 1998,
+    winRate: 75.0,
     tradePairs: 4,
   },
 ]
@@ -70,10 +70,18 @@ export const ACCOUNT_MAP: Record<number, AccountInfo> = Object.fromEntries(
   ACCOUNTS.map((a) => [a.userId, a]),
 )
 
-// 格式化盈亏显示
+// 格式化盈亏显示（带 ¥ 符号）
 export function formatPnl(pnl: number): string {
   const abs = Math.abs(pnl)
   const sign = pnl >= 0 ? '+' : '-'
   if (abs >= 10000) return `${sign}¥${(abs / 10000).toFixed(2)}万`
   return `${sign}¥${abs.toFixed(0)}`
+}
+
+// 格式化盈亏数值（不带 ¥ 符号，用于图表）
+export function formatPnlValue(v: number): string {
+  const abs = Math.abs(v)
+  const sign = v >= 0 ? '+' : '-'
+  if (abs >= 10000) return `${sign}${(abs / 10000).toFixed(1)}万`
+  return `${sign}${abs.toFixed(0)}`
 }

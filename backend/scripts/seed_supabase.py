@@ -60,19 +60,31 @@ def price_aware_qty(price: float, target_value: float) -> int:
     return max(100, round(raw / 100) * 100)
 
 # ── Stock universe ────────────────────────────────────────────────────────────
+# 选股原则：涨跌互现、风格多元（消费/新能源/半导体/军工/光伏/安防/电力）
 STOCKS: list[tuple[str, str]] = [
-    ("600519.SH", "贵州茅台"),
-    ("000858.SZ", "五粮液"),
-    ("601318.SH", "中国平安"),
-    ("000333.SZ", "美的集团"),
-    ("600036.SH", "招商银行"),
-    ("002594.SZ", "比亚迪"),
-    ("601888.SH", "中国中免"),
-    ("000651.SZ", "格力电器"),
-    ("600900.SH", "长江电力"),
-    ("002415.SZ", "海康威视"),
+    ("600519.SH", "贵州茅台"),    # 白酒消费，+1.1%
+    ("002594.SZ", "比亚迪"),      # 新能源整车，+3.7%
+    ("300750.SZ", "宁德时代"),    # 锂电池，+12.2%
+    ("688008.SH", "澜起科技"),    # 半导体/AI算力，+10.6%
+    ("600893.SH", "航发动力"),    # 军工/航空发动机，+30.4%
+    ("688390.SH", "固德威"),      # 光伏逆变器，+36.6%
+    ("601888.SH", "中国中免"),    # 免税消费，-18.6%
+    ("600900.SH", "长江电力"),    # 水电公用，+2.3%
+    ("002415.SZ", "海康威视"),    # 安防科技，+1.6%
+    ("300285.SZ", "国瓷材料"),    # 新材料小盘，+20.2%
 ]
 STOCK_MAP = {code: name for code, name in STOCKS}
+
+INDEX_CODE = "000001.SH"
+INDEX_NAME = "上证指数"
+
+# 个股新闻不足时的板块补充关键词（精准对应，避免误匹配）
+STOCK_SECTOR_KEYWORDS: dict[str, str] = {
+    "002415.SZ": "安防",          # 海康威视 → 安防板块
+    "600893.SH": "航空航天",      # 航发动力 → 航空航天军工
+    "300285.SZ": "新材料",        # 国瓷材料 → 新材料板块
+    "688390.SH": "光伏",          # 固德威 → 光伏板块
+}
 
 PERIOD_START = date(2026, 1, 14)
 PERIOD_END   = date(2026, 3, 14)
@@ -199,48 +211,62 @@ async def fetch_kline(code: str, qveris_available: bool) -> list[dict[str, Any]]
 FINLOOP_NEWS_BASE = "https://ai-uat.finloopfintech.com"
 
 async def fetch_news_finloop(stock_name: str, stock_code: str) -> list[dict[str, Any]]:
-    """Fetch stock news from finloop-news (primary)."""
+    """Fetch stock news from finloop-news (primary).
+
+    If individual stock returns fewer than 5 in-period articles,
+    supplement with sector-level news using the per-stock keyword map.
+    """
     import httpx
-    url = f"{FINLOOP_NEWS_BASE}/flp-news-api/v1/news-agent/informationList"
-    payload = {
-        "category":  "stock",
-        "keyword":   stock_name,
-        "page_size": 20,
-    }
-    async with httpx.AsyncClient(timeout=30.0) as client:
+
+    async def _query(keyword: str, client: httpx.AsyncClient) -> list[dict[str, Any]]:
+        url = f"{FINLOOP_NEWS_BASE}/flp-news-api/v1/news-agent/informationList"
+        payload = {"category": "stock", "keyword": keyword, "page_size": 20}
         resp = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
         resp.raise_for_status()
-        data = resp.json()
+        items = resp.json().get("data", {}).get("information_list", [])
+        rows = []
+        for item in items:
+            try:
+                pt_str = item.get("publish_time", "")
+                if not pt_str:
+                    continue
+                pt = datetime.fromisoformat(pt_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                if not (PERIOD_START <= pt.date() <= PERIOD_END):
+                    continue
+                rows.append({
+                    "publish_time": pt,
+                    "title":        item.get("title", "").strip(),
+                    "summary":      item.get("summary", "").strip(),
+                    "source":       "finloop",
+                })
+            except Exception:
+                continue
+        return rows
 
-    items = data.get("data", {}).get("information_list", [])
-    rows = []
-    for item in items:
-        try:
-            pt_str = item.get("publish_time", "")
-            if not pt_str:
-                continue
-            pt = datetime.fromisoformat(pt_str.replace("Z", "+00:00")).replace(tzinfo=None)
-            # Filter to our period
-            if not (PERIOD_START <= pt.date() <= PERIOD_END):
-                continue
-            rows.append({
-                "publish_time": pt,
-                "title":        item.get("title", "").strip(),
-                "summary":      item.get("summary", "").strip(),
-                "source":       "finloop",
-            })
-        except Exception:
-            continue
-    logger.info("  finloop-news %s(%s) → %d in-period articles", stock_name, stock_code, len(rows))
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        rows = await _query(stock_name, client)
+        logger.info("  finloop-news %s(%s) 个股 → %d 条", stock_name, stock_code, len(rows))
+
+        # Supplement with sector news if fewer than 5 articles
+        sector_kw = STOCK_SECTOR_KEYWORDS.get(stock_code)
+        if sector_kw and len(rows) < 5:
+            sector_rows = await _query(sector_kw, client)
+            # Deduplicate by title
+            existing_titles = {r["title"] for r in rows}
+            added = [r for r in sector_rows if r["title"] not in existing_titles]
+            rows.extend(added)
+            logger.info("  finloop-news %s(%s) 板块「%s」补充 → +%d 条，合计 %d 条",
+                        stock_name, stock_code, sector_kw, len(added), len(rows))
+
     return rows
 
 
 # ── Synthetic K-line fallback ─────────────────────────────────────────────────
 _SEED_PRICES = {
-    "600519.SH": 1450.0, "000858.SZ": 140.0, "601318.SH": 52.0,
-    "000333.SZ": 62.0,   "600036.SH": 42.0,  "002594.SZ": 320.0,
-    "601888.SH": 75.0,   "000651.SZ": 40.0,  "600900.SH": 28.0,
-    "002415.SZ": 30.0,
+    "600519.SH": 1400.0, "002594.SZ": 96.0,  "300750.SZ": 225.0,
+    "688008.SH": 65.0,   "600893.SH": 38.0,  "688390.SH": 50.0,
+    "601888.SH": 90.0,   "600900.SH": 27.0,  "002415.SZ": 31.0,
+    "300285.SZ": 20.0,
 }
 
 def _trading_days(start: date, end: date) -> list[date]:
@@ -418,7 +444,10 @@ async def clear_and_seed(kline_map: dict, news_map: dict[str, list[dict]]) -> No
         # ── Insert market_data ────────────────────────────────────────────────
         logger.info("Inserting market_data...")
         md_rows = []
-        for code, name in STOCKS:
+        all_codes = [(code, name) for code, name in STOCKS]
+        if INDEX_CODE in kline_map:
+            all_codes.append((INDEX_CODE, INDEX_NAME))
+        for code, name in all_codes:
             for r in kline_map.get(code, []):
                 md_rows.append({
                     "stock_code": code, "stock_name": name,
@@ -535,6 +564,11 @@ async def main() -> None:
         rows = await fetch_kline(code, qveris_available)
         kline_map[code] = rows
 
+    # Fetch index K-line (上证指数)
+    logger.info("Fetching index K-line: %s", INDEX_CODE)
+    index_rows = await fetch_kline(INDEX_CODE, qveris_available)
+    kline_map[INDEX_CODE] = index_rows
+
     # ── Fetch news data ───────────────────────────────────────────────────────
     logger.info("=== Fetching news data ===")
     news_map: dict[str, list] = {}
@@ -557,5 +591,59 @@ async def main() -> None:
     await clear_and_seed(kline_map, news_map)
 
 
+async def seed_index_only() -> None:
+    """Incremental seed: only insert 000001.SH index K-line into existing DB."""
+    qveris_available = False
+    try:
+        from app.core.config import get_settings
+        from app.services.qveris_client import init_key_pool
+        s = get_settings()
+        keys = s.all_qveris_keys()
+        if keys:
+            init_key_pool(keys, s.QVERIS_BASE_URL)
+            qveris_available = True
+    except Exception:
+        pass
+
+    logger.info("=== Incremental seed: %s ===", INDEX_CODE)
+    rows = await fetch_kline(INDEX_CODE, qveris_available)
+    if not rows:
+        logger.error("No K-line data fetched for %s — aborting", INDEX_CODE)
+        return
+
+    engine = create_async_engine(DB_URL, echo=False,
+                                 connect_args={"statement_cache_size": 0})
+    async with sessionmaker(engine, class_=AsyncSession)() as session:
+        await session.execute(
+            text("DELETE FROM market_data WHERE stock_code = :code"),
+            {"code": INDEX_CODE},
+        )
+        md_rows = [
+            {
+                "stock_code": INDEX_CODE, "stock_name": INDEX_NAME,
+                "trade_date": r["date"],
+                "open_price":  r["open"],  "high_price": r["high"],
+                "low_price":   r["low"],   "close_price": r["close"],
+                "volume":      r["volume"], "change_pct":  r["change_pct"],
+            }
+            for r in rows
+        ]
+        for i in range(0, len(md_rows), 500):
+            batch = md_rows[i:i + 500]
+            await session.execute(text(
+                "INSERT INTO market_data "
+                "(stock_code,stock_name,trade_date,open_price,high_price,low_price,close_price,volume,change_pct) "
+                "VALUES (:stock_code,:stock_name,:trade_date,:open_price,:high_price,:low_price,:close_price,:volume,:change_pct)"
+            ), batch)
+        await session.commit()
+        logger.info("  → %d index rows inserted for %s", len(md_rows), INDEX_CODE)
+
+    await engine.dispose()
+    logger.info("✅ Index seed completed.")
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    if "--index-only" in sys.argv:
+        asyncio.run(seed_index_only())
+    else:
+        asyncio.run(main())
