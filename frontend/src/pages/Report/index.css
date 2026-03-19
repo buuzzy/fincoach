@@ -190,9 +190,12 @@
 }
 
 /* Backtest */
-.backtest-best {
-  margin-bottom: 12px;
-  color: var(--text-secondary);
+.backtest-chart-wrap {
+  margin-top: 12px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px 8px 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
 }
 
 .positive {

@@ -91,6 +91,7 @@ export interface BacktestScenario {
   improvement: number
   improvement_pct: number
   trade_details: BacktestTradeDetail[]
+  ai_interpretation: string
 }
 
 export interface BacktestResult {

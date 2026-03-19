@@ -29,7 +29,7 @@ from app.services.profiler import analyze_user_profile
 from app.services.pattern import detect_patterns
 from app.services.diagnosis import diagnose
 from app.services.backtest import run_backtest
-from app.services.ai_agent import generate_ai_report
+from app.services.ai_agent import generate_ai_report, design_backtest_scenarios
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -78,15 +78,17 @@ async def _run_pipeline(report_id: int, user_id: int, user_name: str) -> None:
             market_data = [MarketData.model_validate(m) for m in md_orms]
 
             # Pipeline
-            logger.info("[pipeline:%d] step 1/5 — profiling user %s", report_id, user_name)
+            logger.info("[pipeline:%d] step 1/6 — profiling user %s", report_id, user_name)
             profile = analyze_user_profile(trades, user_id, user_name)
-            logger.info("[pipeline:%d] step 2/5 — detecting patterns (%d trades)", report_id, len(trades))
+            logger.info("[pipeline:%d] step 2/6 — detecting patterns (%d trades)", report_id, len(trades))
             patterns = detect_patterns(trades, market_data)
-            logger.info("[pipeline:%d] step 3/5 — diagnosing (%d patterns)", report_id, len(patterns))
+            logger.info("[pipeline:%d] step 3/6 — diagnosing (%d patterns)", report_id, len(patterns))
             diagnosis_result = diagnose(profile, patterns)
-            logger.info("[pipeline:%d] step 4/5 — backtest", report_id)
-            backtest_result = run_backtest(trades, market_data, patterns)
-            logger.info("[pipeline:%d] step 5/5 — AI report", report_id)
+            logger.info("[pipeline:%d] step 4/6 — LLM designs backtest scenarios", report_id)
+            scenario_configs = await design_backtest_scenarios(profile, patterns, diagnosis_result)
+            logger.info("[pipeline:%d] step 5/6 — backtest (%d scenarios)", report_id, len(scenario_configs) or 3)
+            backtest_result = run_backtest(trades, market_data, scenario_configs or None)
+            logger.info("[pipeline:%d] step 6/6 — AI report", report_id)
             ai_result = await generate_ai_report(
                 profile, patterns, diagnosis_result, backtest_result
             )
@@ -94,6 +96,10 @@ async def _run_pipeline(report_id: int, user_id: int, user_name: str) -> None:
             # Backfill ai_commentary into PatternResult objects
             for p in patterns:
                 p.ai_commentary = ai_result.pattern_examples.get(p.pattern_type.value, "")
+
+            # Backfill ai_interpretation into BacktestScenario objects
+            for s in backtest_result.scenarios:
+                s.ai_interpretation = ai_result.backtest_interpretations.get(s.name, "")
 
             # Update report
             report.status = ReportStatus.COMPLETED

@@ -22,6 +22,7 @@ from app.models import (
     PatternResult,
     DiagnosisResult,
     BacktestResult,
+    BacktestScenarioConfig,
 )
 from app.services.qveris_client import qveris_search, qveris_execute
 
@@ -49,7 +50,9 @@ class AIReportResult:
     suggestions: str = ""
     style_description: str = ""
     pattern_examples: dict[str, str] = field(default_factory=dict)
+    backtest_interpretations: dict[str, str] = field(default_factory=dict)
     # pattern_examples: {pattern_type_value: commentary_text}
+    # backtest_interpretations: {scenario_name: interpretation_text}
 
 
 # ── OpenAI function-calling tool definitions ──────────────────────────────────
@@ -227,7 +230,7 @@ def _truncate_data(data: Any, max_rows: int = KLINE_WINDOW) -> Any:
 def _build_system_prompt() -> str:
     return (
         "你是A股交易教练，可以调用工具获取实时行情数据辅助分析。\n\n"
-        "重要：所有输出文本中，请用「该账户」指代交易者，禁止出现任何人名，包括 summary、suggestions、style_description、pattern_examples 所有字段。\n\n"
+        "重要：所有输出文本中，请用「该账户」指代交易者，禁止出现任何人名，包括 summary、suggestions、style_description、pattern_examples、backtest_interpretations 所有字段。\n\n"
         "输出严格 JSON：\n"
         '{\n'
         '  "summary": "本期交易总结（200字内，客观陈述数据与表现）",\n'
@@ -235,9 +238,13 @@ def _build_system_prompt() -> str:
         '  "style_description": "交易行为描述（100字内，描述行为如持仓时长/频率，禁用激进型等人格标签）",\n'
         '  "pattern_examples": {\n'
         '    "<pattern_type>": "该pattern典型案例的点评（80字内，结合具体股票和数据）"\n'
+        '  },\n'
+        '  "backtest_interpretations": {\n'
+        '    "<scenario_name>": "对该回测场景结果的个性化解读（80字内，说明为何对该账户有效或局限性）"\n'
         '  }\n'
         '}\n'
         'pattern_examples 仅包含本次报告检测到的 pattern。\n'
+        'backtest_interpretations 仅包含本次报告运行的回测场景名称作为 key。\n'
         "style_description 示例：'该账户平均持仓3天，周均操作5次，多数盈利交易在3天内完成，亏损交易持仓明显偏长。'"
     )
 
@@ -269,6 +276,18 @@ def _build_user_message(
     pattern_text = "\n".join(pattern_summaries) if pattern_summaries else "（无检测到的模式）"
     pattern_types = [p.pattern_type.value for p in patterns]
 
+    # Build backtest scenario summary
+    scenario_summaries: list[str] = []
+    scenario_names: list[str] = []
+    for s in backtest.scenarios:
+        scenario_names.append(s.name)
+        scenario_summaries.append(
+            f"- {s.name}：原始盈亏{s.original_pnl:,.2f}元 → 优化后{s.adjusted_pnl:,.2f}元"
+            f"，改善{s.improvement:+,.2f}元（{s.improvement_pct:+.1f}%）\n"
+            f"  设计理由：{s.description}"
+        )
+    backtest_text = "\n".join(scenario_summaries) if scenario_summaries else "（无回测场景）"
+
     codes_str = "、".join(stock_codes) if stock_codes else "（无具体股票代码）"
 
     return f"""请分析以下交易账户数据，生成个性化复盘报告。所有文本中请用「该账户」指代交易者，禁止出现任何人名。
@@ -296,11 +315,17 @@ def _build_user_message(
 - 主要问题：{'、'.join(diagnosis.primary_issues)}
 - 摘要：{diagnosis.summary}
 
+## 回测场景结果（LLM 专项设计）
+{backtest_text}
+
 ## 本次检测到的 pattern 类型（用于 pattern_examples key）
 {json.dumps(pattern_types, ensure_ascii=False)}
 
+## 本次回测场景名称（用于 backtest_interpretations key，请原样使用）
+{json.dumps(scenario_names, ensure_ascii=False)}
+
 请先通过工具获取相关行情数据（建议至少查询大盘指数走势），再综合以上数据生成报告。
-最终以JSON格式返回，pattern_examples 中仅需包含以上列出的 pattern 类型。"""
+最终以JSON格式返回，pattern_examples 中仅需包含以上列出的 pattern 类型，backtest_interpretations 中仅需包含以上列出的场景名称。"""
 
 
 def _extract_stock_codes(
@@ -389,6 +414,7 @@ def _parse_json_response(content: str) -> AIReportResult:
         suggestions=data.get("suggestions", ""),
         style_description=data.get("style_description", ""),
         pattern_examples=data.get("pattern_examples", {}),
+        backtest_interpretations=data.get("backtest_interpretations", {}),
     )
 
 
@@ -470,6 +496,104 @@ def _fallback_report(
         style_description=style_description,
         pattern_examples=pattern_examples,
     )
+
+
+# ── LLM Call 1: Design backtest scenarios ─────────────────────────────────────
+
+_SCENARIO_DESIGN_SYSTEM = (
+    "你是A股量化策略分析师，根据账户特征为其量身设计2-3个回测策略场景。\n\n"
+    "可选策略类型及参数：\n"
+    "  stop_loss_tighten:     params.threshold_pct（止损线，如 -4 到 -7，默认-6）\n"
+    "  profit_hold_extend:    params.hold_days（延长持有天数，如 3 到 15，默认5）\n"
+    "  chase_high_avoid:      params.ma_multiplier（追高阈值，如 1.02 到 1.06，默认1.03）\n"
+    "  trade_frequency_limit: params.max_per_week（每周最多交易次数，如 2 到 5，默认3）\n"
+    "  hold_duration_limit:   params.max_days（最长持仓天数，如 10 到 30，默认15）\n\n"
+    "选择原则：\n"
+    "  - 只选择与该账户最相关的2-3个类型\n"
+    "  - 参数要根据账户实际数据个性化（如账户平均亏损-12%，止损就设-7%而非-6%）\n"
+    "  - llm_rationale 要引用账户具体数据说明为何选择该策略（50字内）\n"
+    "  - name 要简洁直观，体现个性化参数，如「收紧止损至-7%」\n\n"
+    "严格输出 JSON，禁止出现任何人名，用「该账户」指代：\n"
+    '{"scenarios": [{"type": "...", "name": "...", "llm_rationale": "...", "params": {...}}, ...]}'
+)
+
+
+async def design_backtest_scenarios(
+    profile: UserProfile,
+    patterns: list[PatternResult],
+    diagnosis: DiagnosisResult,
+) -> list[BacktestScenarioConfig]:
+    """LLM Call 1: design personalised backtest scenario configs for this account."""
+    settings = get_settings()
+
+    if not settings.LLM_API_KEY:
+        logger.info("[AI Agent] No LLM_API_KEY, using default backtest scenarios.")
+        return []
+
+    try:
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(
+            base_url=settings.LLM_BASE_URL,
+            api_key=settings.LLM_API_KEY,
+        )
+
+        # Build a concise account summary for scenario design
+        pattern_summary = ", ".join(
+            f"{p.pattern_name}×{p.occurrences}" for p in patterns
+        ) or "无明显模式"
+
+        user_msg = (
+            f"账户特征：\n"
+            f"- 交易笔数：{profile.trade_count}，胜率：{profile.win_rate:.1%}\n"
+            f"- 总盈亏：{profile.total_pnl:,.2f}元，平均持仓：{profile.avg_holding_days:.1f}天\n"
+            f"- 单笔最大亏损：{profile.max_single_loss:,.2f}元，单笔最大盈利：{profile.max_single_gain:,.2f}元\n"
+            f"- 每周交易频率：{profile.trade_frequency_per_week:.1f}次\n"
+            f"- 检测到的模式：{pattern_summary}\n"
+            f"- 主要诊断问题：{'、'.join(diagnosis.primary_issues)}\n\n"
+            f"请为该账户设计2-3个最有针对性的回测策略场景，以JSON输出。"
+        )
+
+        response = await client.chat.completions.create(
+            model=settings.LLM_MODEL,
+            messages=[
+                {"role": "system", "content": _SCENARIO_DESIGN_SYSTEM},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.5,
+            max_tokens=800,
+        )
+
+        content = response.choices[0].message.content or ""
+        # Strip markdown fences
+        cleaned = content.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+        if not cleaned.startswith("{"):
+            start = cleaned.find("{")
+            if start != -1:
+                cleaned = cleaned[start:]
+
+        data = json.loads(cleaned)
+        configs = [
+            BacktestScenarioConfig(
+                type=s["type"],
+                name=s.get("name", s["type"]),
+                llm_rationale=s.get("llm_rationale", ""),
+                params=s.get("params", {}),
+            )
+            for s in data.get("scenarios", [])
+            if s.get("type")
+        ]
+        logger.info("[AI Agent] LLM designed %d backtest scenarios", len(configs))
+        return configs
+
+    except Exception as exc:
+        logger.warning("[AI Agent] design_backtest_scenarios failed: %s — using defaults", exc)
+        return []
 
 
 # ── Main entry point ───────────────────────────────────────────────────────────

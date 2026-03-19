@@ -7,6 +7,7 @@ import { ACCOUNT_MAP } from '../../constants/accounts'
 import type { ReportResponse } from '../../types'
 import PatternSwiper from '../../components/PatternCard/PatternSwiper'
 import BacktestChart from '../../components/Charts/BacktestChart'
+import BacktestSwiper from '../../components/Charts/BacktestSwiper'
 import PnlChart from '../../components/Charts/PnlChart'
 import GeneratingProgress from '../../components/GeneratingProgress'
 import './index.css'
@@ -45,6 +46,7 @@ export default function Report() {
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string>('')
+  const [activeScenario, setActiveScenario] = useState<string>('')
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startedAtRef = useRef<number>(Date.now())
 
@@ -61,6 +63,10 @@ export default function Report() {
           if (pollingRef.current) {
             clearInterval(pollingRef.current)
             pollingRef.current = null
+          }
+          // Init active scenario to best
+          if (data.backtest?.best_scenario && !activeScenario) {
+            setActiveScenario(data.backtest.best_scenario)
           }
         }
       } catch (err) {
@@ -230,22 +236,24 @@ export default function Report() {
               </section>
             )}
 
-            {/* 7. 回测对比（纯折线） */}
-            {report.backtest && (
+            {/* 7. 回测对比 */}
+            {report.backtest && report.backtest.scenarios.length > 0 && (
               <section className="report-section">
-                <Card title="回测对比">
-                  <p className="backtest-best">
-                    最佳策略：<strong>{report.backtest.best_scenario}</strong>
-                    ，最大改善{' '}
-                    <span className="positive">
-                      +{report.backtest.max_improvement.toFixed(2)}
-                    </span>
-                  </p>
+                <h3 className="section-title">回测对比</h3>
+                {/* Scenario swiper cards */}
+                <BacktestSwiper
+                  scenarios={report.backtest.scenarios}
+                  bestScenario={report.backtest.best_scenario}
+                  onActiveChange={(name) => setActiveScenario(name)}
+                />
+                {/* Multi-scenario cumulative PnL chart */}
+                <div className="backtest-chart-wrap">
                   <BacktestChart
                     scenarios={report.backtest.scenarios}
                     bestScenario={report.backtest.best_scenario}
+                    activeScenario={activeScenario || report.backtest.best_scenario}
                   />
-                </Card>
+                </div>
               </section>
             )}
 

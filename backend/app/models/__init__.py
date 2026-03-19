@@ -179,6 +179,14 @@ class DiagnosisResult(BaseModel):
     data_warning: Optional[Literal["insufficient", "preliminary"]] = None
 
 
+class BacktestScenarioConfig(BaseModel):
+    """LLM-designed scenario config — drives the backtest engine."""
+    type: str          # stop_loss_tighten | profit_hold_extend | chase_high_avoid | trade_frequency_limit | hold_duration_limit
+    name: str          # 展示名称，如「收紧止损至-5%」
+    llm_rationale: str # LLM 给该账户的设计理由
+    params: dict = Field(default_factory=dict)  # type-specific params
+
+
 class BacktestScenario(BaseModel):
     name: str
     description: str
@@ -188,6 +196,7 @@ class BacktestScenario(BaseModel):
     improvement: float
     improvement_pct: float
     trade_details: list[dict] = Field(default_factory=list)
+    ai_interpretation: str = ""  # LLM 对本场景回测结果的个性化解读
 
 
 class BacktestResult(BaseModel):
