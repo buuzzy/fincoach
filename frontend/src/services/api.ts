@@ -5,6 +5,8 @@ import type {
   ReportResponse,
   ReportListItem,
   MarketDataResponse,
+  ClosedTrade,
+  TradeReviewResponse,
 } from '../types'
 
 // ── 错误类型 ────────────────────────────────────────────────────────────────
@@ -121,6 +123,29 @@ export async function getMarketData(
   const { data } = await api.get<MarketDataResponse>(
     `/market-data/${stockCode}`,
     { params: { start: startDate, end: endDate } },
+  )
+  return data
+}
+
+// ─── Trades ─────────────────────────────────────────────────────────
+
+export async function getClosedTrades(
+  userId: number,
+  start: string,
+  end: string,
+): Promise<ClosedTrade[]> {
+  const { data } = await api.get<ClosedTrade[]>(`/trades/${userId}/closed`, {
+    params: { start, end },
+  })
+  return data
+}
+
+export async function getTradeReview(
+  buyTradeId: number,
+  sellTradeId: number,
+): Promise<TradeReviewResponse> {
+  const { data } = await api.get<TradeReviewResponse>(
+    `/trades/review/${buyTradeId}/${sellTradeId}`,
   )
   return data
 }

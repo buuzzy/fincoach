@@ -4,7 +4,7 @@ Run once from the backend directory:
     python scripts/seed_supabase.py
 
 Requirements:
-    pip install asyncpg sqlalchemy pydantic-settings python-dotenv
+    pip install asyncpg sqlalchemy pydantic-settings python-dotenv httpx
 
 After this script completes successfully, set FORCE_RESEED=false in Render
 and the data will never be touched again.
@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import random
 import sys
 import os
@@ -75,8 +74,8 @@ STOCKS: list[tuple[str, str]] = [
 ]
 STOCK_MAP = {code: name for code, name in STOCKS}
 
-PERIOD_START = date(2025, 1, 2)
-PERIOD_END   = date(2025, 3, 31)
+PERIOD_START = date(2026, 1, 14)
+PERIOD_END   = date(2026, 3, 14)
 
 # ── Users ─────────────────────────────────────────────────────────────────────
 USERS = [
@@ -87,19 +86,57 @@ USERS = [
     (5, "海通****8156", "balanced"),
 ]
 
-# ── QVeris K-line fetch ───────────────────────────────────────────────────────
-_KLINE_TOOL_ID = "ths_ifind.history_quotation.v1"
+# ── flp-mktdata K-line fetch ──────────────────────────────────────────────────
+FLP_MKTDATA_BASE = "https://papi-uat.finloopg.com/flp-mktdata-hub"
 
-async def fetch_kline(code: str) -> list[dict[str, Any]]:
+async def fetch_kline_flp(code: str) -> list[dict[str, Any]]:
+    """Fetch daily K-line from flp-mktdata (primary)."""
+    import httpx
+    url = f"{FLP_MKTDATA_BASE}/v1/stock/history"
+    payload = {
+        "code": code,
+        "startDate": PERIOD_START.strftime("%Y-%m-%d"),
+        "endDate":   PERIOD_END.strftime("%Y-%m-%d"),
+        "ktype": "day",
+    }
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
+        resp.raise_for_status()
+        data = resp.json()
+
+    rows = []
+    for r in data.get("data", []):
+        try:
+            d = date.fromisoformat(str(r["time"])[:10])
+            rows.append({
+                "date":       d,
+                "open":       float(r.get("open")  or 0),
+                "high":       float(r.get("high")  or 0),
+                "low":        float(r.get("low")   or 0),
+                "close":      float(r.get("close") or 0),
+                "volume":     float(r.get("vol")   or 0),
+                "change_pct": float(r.get("chgPct") or 0),
+            })
+        except Exception:
+            continue
+    logger.info("  flp-mktdata %s → %d rows", code, len(rows))
+    return rows
+
+
+async def fetch_kline_qveris(code: str) -> list[dict[str, Any]]:
+    """Fetch daily K-line from QVeris (fallback)."""
     from app.services.qveris_client import get_key_pool
     pool = get_key_pool()
-    _tid, search_id = await pool.search("iFinD 同花顺历史行情", preferred_tool_id=_KLINE_TOOL_ID)
-    resp = await pool.execute(_KLINE_TOOL_ID, search_id, {
-        "codes": code,
+    tool_id, search_id = await pool.search(
+        f"A股历史K线 {code}",
+        preferred_tool_id="ths_ifind.history_quotation.v1",
+    )
+    resp = await pool.execute(tool_id, search_id, {
+        "codes":      code,
         "indicators": "open,high,low,close,volume,changeRatio",
-        "startdate": PERIOD_START.strftime("%Y-%m-%d"),
-        "enddate":   PERIOD_END.strftime("%Y-%m-%d"),
-        "interval":  "D",
+        "startdate":  PERIOD_START.strftime("%Y-%m-%d"),
+        "enddate":    PERIOD_END.strftime("%Y-%m-%d"),
+        "interval":   "D",
     })
     if not resp.get("success"):
         return []
@@ -118,12 +155,12 @@ async def fetch_kline(code: str) -> list[dict[str, Any]]:
         try:
             d = date.fromisoformat(str(r.get("time") or r.get("date", ""))[:10])
             rows.append({
-                "date":   d,
-                "open":   float(r.get("open")  or 0),
-                "high":   float(r.get("high")  or 0),
-                "low":    float(r.get("low")   or 0),
-                "close":  float(r.get("close") or 0),
-                "volume": float(r.get("volume") or 0),
+                "date":       d,
+                "open":       float(r.get("open")  or 0),
+                "high":       float(r.get("high")  or 0),
+                "low":        float(r.get("low")   or 0),
+                "close":      float(r.get("close") or 0),
+                "volume":     float(r.get("volume") or 0),
                 "change_pct": float(r.get("changeRatio") or 0),
             })
         except Exception:
@@ -131,12 +168,79 @@ async def fetch_kline(code: str) -> list[dict[str, Any]]:
     logger.info("  QVeris %s → %d rows", code, len(rows))
     return rows
 
-# Synthetic fallback
+
+async def fetch_kline(code: str, qveris_available: bool) -> list[dict[str, Any]]:
+    """Primary: flp-mktdata. Fallback: QVeris. Final fallback: synthetic."""
+    # Primary: flp-mktdata
+    try:
+        rows = await fetch_kline_flp(code)
+        if rows:
+            return rows
+        logger.warning("  flp-mktdata %s returned 0 rows, trying QVeris", code)
+    except Exception as e:
+        logger.warning("  flp-mktdata %s failed: %s, trying QVeris", code, e)
+
+    # Fallback: QVeris
+    if qveris_available:
+        try:
+            rows = await fetch_kline_qveris(code)
+            if rows:
+                return rows
+            logger.warning("  QVeris %s returned 0 rows, using synthetic", code)
+        except Exception as e:
+            logger.warning("  QVeris %s failed: %s, using synthetic", code, e)
+
+    # Final fallback: synthetic
+    logger.warning("  Using synthetic K-line for %s", code)
+    return synthetic_kline(code)
+
+
+# ── finloop-news fetch ─────────────────────────────────────────────────────────
+FINLOOP_NEWS_BASE = "https://ai-uat.finloopfintech.com"
+
+async def fetch_news_finloop(stock_name: str, stock_code: str) -> list[dict[str, Any]]:
+    """Fetch stock news from finloop-news (primary)."""
+    import httpx
+    url = f"{FINLOOP_NEWS_BASE}/flp-news-api/v1/news-agent/informationList"
+    payload = {
+        "category":  "stock",
+        "keyword":   stock_name,
+        "page_size": 20,
+    }
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
+        resp.raise_for_status()
+        data = resp.json()
+
+    items = data.get("data", {}).get("information_list", [])
+    rows = []
+    for item in items:
+        try:
+            pt_str = item.get("publish_time", "")
+            if not pt_str:
+                continue
+            pt = datetime.fromisoformat(pt_str.replace("Z", "+00:00")).replace(tzinfo=None)
+            # Filter to our period
+            if not (PERIOD_START <= pt.date() <= PERIOD_END):
+                continue
+            rows.append({
+                "publish_time": pt,
+                "title":        item.get("title", "").strip(),
+                "summary":      item.get("summary", "").strip(),
+                "source":       "finloop",
+            })
+        except Exception:
+            continue
+    logger.info("  finloop-news %s(%s) → %d in-period articles", stock_name, stock_code, len(rows))
+    return rows
+
+
+# ── Synthetic K-line fallback ─────────────────────────────────────────────────
 _SEED_PRICES = {
-    "600519.SH": 1488.0, "000858.SZ": 150.0, "601318.SH": 48.0,
-    "000333.SZ": 58.0,   "600036.SH": 35.0,  "002594.SZ": 250.0,
-    "601888.SH": 80.0,   "000651.SZ": 38.0,  "600900.SH": 26.0,
-    "002415.SZ": 32.0,
+    "600519.SH": 1450.0, "000858.SZ": 140.0, "601318.SH": 52.0,
+    "000333.SZ": 62.0,   "600036.SH": 42.0,  "002594.SZ": 320.0,
+    "601888.SH": 75.0,   "000651.SZ": 40.0,  "600900.SH": 28.0,
+    "002415.SZ": 30.0,
 }
 
 def _trading_days(start: date, end: date) -> list[date]:
@@ -162,6 +266,7 @@ def synthetic_kline(code: str) -> list[dict[str, Any]]:
                      "close": close, "volume": vol, "change_pct": round(chg, 2)})
         price = close
     return rows
+
 
 # ── Trade generation ──────────────────────────────────────────────────────────
 
@@ -247,23 +352,23 @@ def generate_zhaoxin_trades(user_id: int, kline_map: dict, rng: random.Random) -
     rows0, rows1 = kline_map.get(c0, []), kline_map.get(c1, [])
 
     # slow_stop_loss: -12% loss
-    if len(rows0) >= 25:
-        bp = round(rows0[5]["close"] * 1.03, 2)
-        sp = round(clamp(bp * 0.88, rows0[20]["low"], rows0[20]["high"]), 2)
-        add(c0, 5, 20, bp, sp)
+    if len(rows0) >= 22:
+        bp = round(rows0[3]["close"] * 1.03, 2)
+        sp = round(clamp(bp * 0.88, rows0[16]["low"], rows0[16]["high"]), 2)
+        add(c0, 3, 16, bp, sp)
 
     # chase_high: buy 8% above 5-day avg
-    if len(rows0) >= 40:
-        avg5 = sum(r["close"] for r in rows0[22:27]) / 5
-        bp = round(clamp(avg5 * 1.08, rows0[27]["low"], rows0[27]["high"]), 2)
-        sp = round(clamp(rows0[35]["close"] * 0.98, rows0[35]["low"], rows0[35]["high"]), 2)
-        add(c0, 27, 35, bp, sp)
+    if len(rows0) >= 30:
+        avg5 = sum(r["close"] for r in rows0[17:22]) / 5
+        bp = round(clamp(avg5 * 1.08, rows0[22]["low"], rows0[22]["high"]), 2)
+        sp = round(clamp(rows0[28]["close"] * 0.98, rows0[28]["low"], rows0[28]["high"]), 2)
+        add(c0, 22, 28, bp, sp)
 
-    # 2-4 normal trades
-    if len(rows1) >= 40:
-        add(c1, 8, 18)
+    # 2-4 normal trades on c1
+    if len(rows1) >= 15:
+        add(c1, 5, 13)
     for i in range(rng.randint(1, 2)):
-        base = 40 + i * 8
+        base = 14 + i * 6
         if len(rows1) > base + 5:
             add(c1, base, base + 5)
 
@@ -272,13 +377,32 @@ def generate_zhaoxin_trades(user_id: int, kline_map: dict, rng: random.Random) -
 
 # ── DB insert ─────────────────────────────────────────────────────────────────
 
-async def clear_and_seed(kline_map: dict) -> None:
-    engine = create_async_engine(DB_URL, echo=False)
+async def clear_and_seed(kline_map: dict, news_map: dict[str, list[dict]]) -> None:
+    engine = create_async_engine(
+        DB_URL,
+        echo=False,
+        connect_args={"statement_cache_size": 0},
+    )
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with async_session() as session:
+        # ── Ensure stock_news table exists BEFORE DELETE ──────────────────────
+        await session.execute(text("""
+            CREATE TABLE IF NOT EXISTS stock_news (
+                id           SERIAL PRIMARY KEY,
+                stock_code   VARCHAR(20)  NOT NULL,
+                stock_name   VARCHAR(50)  NOT NULL,
+                publish_time TIMESTAMP    NOT NULL,
+                title        TEXT         NOT NULL,
+                summary      TEXT,
+                source       VARCHAR(20)  NOT NULL DEFAULT 'finloop',
+                created_at   TIMESTAMP    NOT NULL DEFAULT NOW()
+            )
+        """))
+        await session.commit()
+
         logger.info("Clearing existing data...")
-        for tbl in ("reports", "trades", "market_data", "users"):
+        for tbl in ("reports", "trades", "market_data", "stock_news", "users"):
             await session.execute(text(f"DELETE FROM {tbl}"))
         await session.commit()
 
@@ -313,6 +437,27 @@ async def clear_and_seed(kline_map: dict) -> None:
         await session.commit()
         logger.info("  → %d market_data rows inserted", len(md_rows))
 
+        # ── Insert stock_news ─────────────────────────────────────────────────
+        logger.info("Inserting stock_news...")
+        total_news = 0
+        for code, name in STOCKS:
+            articles = news_map.get(code, [])
+            for a in articles:
+                await session.execute(text(
+                    "INSERT INTO stock_news (stock_code,stock_name,publish_time,title,summary,source) "
+                    "VALUES (:stock_code,:stock_name,:publish_time,:title,:summary,:source)"
+                ), {
+                    "stock_code":   code,
+                    "stock_name":   name,
+                    "publish_time": a["publish_time"],
+                    "title":        a["title"],
+                    "summary":      a.get("summary", ""),
+                    "source":       a.get("source", "finloop"),
+                })
+                total_news += 1
+        await session.commit()
+        logger.info("  → %d stock_news rows inserted", total_news)
+
         # ── Insert trades ─────────────────────────────────────────────────────
         logger.info("Generating and inserting trades...")
         all_trades = []
@@ -340,7 +485,6 @@ async def clear_and_seed(kline_map: dict) -> None:
         for uid, name, _ in USERS:
             user_trades = [t for t in all_trades if t["user_id"] == uid]
             sells = [t for t in user_trades if t["direction"] == "sell"]
-            buys  = {i: t for i, t in enumerate(user_trades) if t["direction"] == "buy"}
             total_fee = 0.0
             for t in user_trades:
                 amt = t["price"] * t["quantity"]
@@ -356,6 +500,13 @@ async def clear_and_seed(kline_map: dict) -> None:
             )
         logger.info("=" * 50)
 
+        # ── News coverage summary ─────────────────────────────────────────────
+        logger.info("NEWS COVERAGE SUMMARY:")
+        for code, name in STOCKS:
+            count = len(news_map.get(code, []))
+            logger.info("  %-12s %-8s → %d articles", code, name, count)
+        logger.info("=" * 50)
+
     await engine.dispose()
     logger.info("✅ Supabase seeded successfully.")
 
@@ -363,7 +514,7 @@ async def clear_and_seed(kline_map: dict) -> None:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 async def main() -> None:
-    # Init QVeris key pool
+    # Init QVeris key pool (for K-line fallback)
     qveris_available = False
     try:
         from app.core.config import get_settings
@@ -375,23 +526,35 @@ async def main() -> None:
             qveris_available = True
             logger.info("QVeris key pool initialised (%d keys)", len(keys))
     except Exception as e:
-        logger.warning("QVeris unavailable: %s — will use synthetic fallback", e)
+        logger.warning("QVeris unavailable: %s — K-line fallback disabled", e)
 
-    # Fetch K-line data
+    # ── Fetch K-line data ─────────────────────────────────────────────────────
+    logger.info("=== Fetching K-line data ===")
     kline_map: dict[str, list] = {}
     for code, name in STOCKS:
-        rows = []
-        if qveris_available:
-            try:
-                rows = await fetch_kline(code)
-            except Exception as e:
-                logger.warning("QVeris fetch failed for %s: %s", code, e)
-        if not rows:
-            logger.warning("Using synthetic K-line for %s", code)
-            rows = synthetic_kline(code)
+        rows = await fetch_kline(code, qveris_available)
         kline_map[code] = rows
 
-    await clear_and_seed(kline_map)
+    # ── Fetch news data ───────────────────────────────────────────────────────
+    logger.info("=== Fetching news data ===")
+    news_map: dict[str, list] = {}
+    for code, name in STOCKS:
+        articles: list[dict] = []
+        # Primary: finloop-news
+        try:
+            articles = await fetch_news_finloop(name, code)
+        except Exception as e:
+            logger.warning("  finloop-news %s failed: %s", name, e)
+
+        if not articles:
+            logger.warning("  No in-period news found for %s (%s) — will store 0 articles", name, code)
+
+        news_map[code] = articles
+
+    total = sum(len(v) for v in news_map.values())
+    logger.info("Total articles fetched: %d across %d stocks", total, len(STOCKS))
+
+    await clear_and_seed(kline_map, news_map)
 
 
 if __name__ == "__main__":

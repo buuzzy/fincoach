@@ -6,6 +6,7 @@ import AccountSelect from './pages/AccountSelect'
 import Home from './pages/Home'
 import Report from './pages/Report'
 import History from './pages/History'
+import TradeReview from './pages/TradeReview'
 
 function App() {
   return (
@@ -42,6 +43,14 @@ function App() {
             element={
               <PrivateRoute>
                 <History />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/trade-review/:buyTradeId/:sellTradeId"
+            element={
+              <PrivateRoute>
+                <TradeReview />
               </PrivateRoute>
             }
           />

@@ -156,3 +156,57 @@ export interface MarketDataResponse {
   stock_name: string
   bars: CandleBar[]
 }
+
+// ─── Single Trade Review ─────────────────────────────────────────────────────
+
+export interface ClosedTrade {
+  buy_trade_id: number
+  sell_trade_id: number
+  stock_code: string
+  stock_name: string
+  buy_time: string
+  sell_time: string
+  buy_price: number
+  sell_price: number
+  quantity: number
+  pnl: number
+  pnl_pct: number
+  hold_days: number
+}
+
+export interface TradeNewsItem {
+  publish_time: string
+  title: string
+  summary: string
+  source: string
+}
+
+export interface TradeKlineBar {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  change_pct: number
+}
+
+export interface TradeReviewResponse {
+  buy_trade_id: number
+  sell_trade_id: number
+  stock_code: string
+  stock_name: string
+  buy_time: string
+  sell_time: string
+  buy_price: number
+  sell_price: number
+  quantity: number
+  pnl: number
+  pnl_pct: number
+  hold_days: number
+  kline: TradeKlineBar[]
+  news: TradeNewsItem[]
+  status: 'generating' | 'completed' | 'failed'
+  ai_review?: string | null
+  error_message?: string | null
+}

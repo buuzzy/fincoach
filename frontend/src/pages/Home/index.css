@@ -72,7 +72,89 @@
   margin-top: 24px;
 }
 
-.history-btn {
+.trade-review-btn {
   margin-top: 12px;
 }
 
+.history-btn {
+  margin-top: 8px;
+  color: var(--text-secondary);
+}
+
+/* Trade list popup */
+.trade-list-popup {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.trade-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.trade-list-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.trade-list-period {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.trade-list-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.trade-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.trade-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.trade-item-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.trade-item-code {
+  font-size: 11px;
+}
+
+.trade-item-sub {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.trade-item-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.trade-item-pct {
+  font-size: 12px;
+}

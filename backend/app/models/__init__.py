@@ -260,6 +260,36 @@ class UserListItem(BaseModel):
         from_attributes = True
 
 
+# ─── Stock News ORM ────────────────────────────────────────────────
+
+class StockNewsORM(Base):
+    __tablename__ = "stock_news"
+
+    id = Column(Integer, primary_key=True, index=True)
+    stock_code = Column(String(20), nullable=False, index=True)
+    stock_name = Column(String(50), nullable=False)
+    publish_time = Column(DateTime, nullable=False, index=True)
+    title = Column(Text, nullable=False)
+    summary = Column(Text, nullable=True)
+    source = Column(String(20), nullable=False, default="finloop")  # 'finloop' | 'qveris'
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ─── Stock News Schema ─────────────────────────────────────────────
+
+class StockNews(BaseModel):
+    id: Optional[int] = None
+    stock_code: str
+    stock_name: str
+    publish_time: datetime
+    title: str
+    summary: Optional[str] = None
+    source: str = "finloop"
+
+    class Config:
+        from_attributes = True
+
+
 # ─── Market Data API Schemas ───────────────────────────────────────
 
 class CandleBar(BaseModel):

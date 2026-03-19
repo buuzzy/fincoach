@@ -22,6 +22,7 @@ from app.api.auth import router as auth_router
 from app.api.reports import router as reports_router
 from app.api.users import router as users_router
 from app.api.market import router as market_router
+from app.api.trades import router as trades_router
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,7 @@ app.include_router(auth_router)
 app.include_router(reports_router)
 app.include_router(users_router)
 app.include_router(market_router)
+app.include_router(trades_router)
 
 
 @app.get("/api/health")

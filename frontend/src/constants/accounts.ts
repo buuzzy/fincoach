@@ -11,7 +11,7 @@ export interface AccountInfo {
   tradePairs: number
 }
 
-// 数据来源：从 Supabase mock 数据实际计算的真实值
+// 数据来源：从 Supabase mock 数据实际计算的真实值（2026-01-14 ~ 2026-03-14）
 export const ACCOUNTS: AccountInfo[] = [
   {
     userId: 1,
@@ -19,8 +19,8 @@ export const ACCOUNTS: AccountInfo[] = [
     maskedAccount: '****3821',
     logoColor: '#e8652a',
     logoText: '华泰',
-    totalPnl: -11843,
-    winRate: 26.3,
+    totalPnl: -18470,
+    winRate: 15.8,
     tradePairs: 19,
   },
   {
@@ -29,8 +29,8 @@ export const ACCOUNTS: AccountInfo[] = [
     maskedAccount: '****0712',
     logoColor: '#c1272d',
     logoText: '招商',
-    totalPnl: 5618,
-    winRate: 50.0,
+    totalPnl: -6856,
+    winRate: 40.0,
     tradePairs: 10,
   },
   {
@@ -39,8 +39,8 @@ export const ACCOUNTS: AccountInfo[] = [
     maskedAccount: '****5967',
     logoColor: '#e05b16',
     logoText: '东财',
-    totalPnl: -10704,
-    winRate: 35.3,
+    totalPnl: -57778,
+    winRate: 11.8,
     tradePairs: 17,
   },
   {
@@ -49,8 +49,8 @@ export const ACCOUNTS: AccountInfo[] = [
     maskedAccount: '****2483',
     logoColor: '#1a3fa3',
     logoText: '中信',
-    totalPnl: 17190,
-    winRate: 60.0,
+    totalPnl: -4342,
+    winRate: 50.0,
     tradePairs: 10,
   },
   {
@@ -59,7 +59,7 @@ export const ACCOUNTS: AccountInfo[] = [
     maskedAccount: '****8156',
     logoColor: '#0e7a4c',
     logoText: '海通',
-    totalPnl: -1804,
+    totalPnl: -3201,
     winRate: 25.0,
     tradePairs: 4,
   },

@@ -4,9 +4,16 @@ import {
   NavBar,
   Button,
   DatePicker,
+  Popup,
+  List,
+  Tag,
+  SpinLoading,
+  ErrorBlock,
 } from 'antd-mobile'
 import dayjs from 'dayjs'
 import { ACCOUNT_MAP } from '../../constants/accounts'
+import { getClosedTrades } from '../../services/api'
+import type { ClosedTrade } from '../../types'
 import './index.css'
 
 export default function Home() {
@@ -15,11 +22,17 @@ export default function Home() {
   const userIdNum = Number(userId)
   const account = ACCOUNT_MAP[userIdNum]
 
-  // MVP: mock data covers 2025-01-01 ~ 2025-03-31
-  const [periodStart, setPeriodStart] = useState<Date>(dayjs('2025-01-01').toDate())
-  const [periodEnd, setPeriodEnd] = useState<Date>(dayjs('2025-03-31').toDate())
+  // Data covers 2026-01-14 ~ 2026-03-14
+  const [periodStart, setPeriodStart] = useState<Date>(dayjs('2026-01-14').toDate())
+  const [periodEnd, setPeriodEnd] = useState<Date>(dayjs('2026-03-14').toDate())
   const [showStartPicker, setShowStartPicker] = useState(false)
   const [showEndPicker, setShowEndPicker] = useState(false)
+
+  // Trade list drawer
+  const [showTradeList, setShowTradeList] = useState(false)
+  const [trades, setTrades] = useState<ClosedTrade[]>([])
+  const [tradesLoading, setTradesLoading] = useState(false)
+  const [tradesError, setTradesError] = useState<string | null>(null)
 
   if (!account) {
     navigate('/', { replace: true })
@@ -32,8 +45,31 @@ export default function Home() {
       period_start: dayjs(periodStart).format('YYYY-MM-DD'),
       period_end: dayjs(periodEnd).format('YYYY-MM-DD'),
     }
-    // 立即跳转，让用户看到生成中间态，API 在后台继续
     navigate('/report/pending', { state: { params } })
+  }
+
+  const handleViewTrades = async () => {
+    setTradesLoading(true)
+    setTradesError(null)
+    setShowTradeList(true)
+    try {
+      const data = await getClosedTrades(
+        userIdNum,
+        dayjs(periodStart).format('YYYY-MM-DD'),
+        dayjs(periodEnd).format('YYYY-MM-DD'),
+      )
+      setTrades(data)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '加载失败，请重试'
+      setTradesError(msg)
+    } finally {
+      setTradesLoading(false)
+    }
+  }
+
+  const handleTradeClick = (trade: ClosedTrade) => {
+    setShowTradeList(false)
+    navigate(`/trade-review/${trade.buy_trade_id}/${trade.sell_trade_id}`)
   }
 
   return (
@@ -92,10 +128,21 @@ export default function Home() {
           开始复盘分析
         </Button>
 
-        {/* History Link */}
+        {/* Single Trade Review Button */}
         <Button
           block
           fill="outline"
+          size="large"
+          className="trade-review-btn"
+          onClick={handleViewTrades}
+        >
+          查看单笔交易复盘
+        </Button>
+
+        {/* History Link */}
+        <Button
+          block
+          fill="none"
           size="large"
           className="history-btn"
           onClick={() => navigate('/history')}
@@ -103,6 +150,81 @@ export default function Home() {
           查看历史报告
         </Button>
       </div>
+
+      {/* Closed trades drawer */}
+      <Popup
+        visible={showTradeList}
+        onMaskClick={() => setShowTradeList(false)}
+        position="bottom"
+        bodyStyle={{ height: '70vh', borderRadius: '12px 12px 0 0', overflow: 'hidden' }}
+      >
+        <div className="trade-list-popup">
+          <div className="trade-list-header">
+            <span className="trade-list-title">已平仓交易</span>
+            <span className="trade-list-period">
+              {dayjs(periodStart).format('MM/DD')} ~ {dayjs(periodEnd).format('MM/DD')}
+            </span>
+          </div>
+
+          {tradesLoading && (
+            <div className="trade-list-loading">
+              <SpinLoading color="primary" />
+              <span>加载中…</span>
+            </div>
+          )}
+
+          {tradesError && (
+            <ErrorBlock status="default" title="加载失败" description={tradesError} />
+          )}
+
+          {!tradesLoading && !tradesError && trades.length === 0 && (
+            <ErrorBlock status="empty" title="暂无已平仓交易" description="该时间段内没有完成的买卖对" />
+          )}
+
+          {!tradesLoading && !tradesError && trades.length > 0 && (
+            <div className="trade-list-scroll">
+              <List>
+                {trades.map((trade) => {
+                  const isProfit = trade.pnl >= 0
+                  const pnlColor = isProfit ? 'var(--profit-color)' : 'var(--loss-color)'
+                  const pnlSign  = isProfit ? '+' : ''
+                  return (
+                    <List.Item
+                      key={`${trade.buy_trade_id}-${trade.sell_trade_id}`}
+                      onClick={() => handleTradeClick(trade)}
+                      arrow
+                      extra={
+                        <div className="trade-item-right">
+                          <span style={{ color: pnlColor, fontWeight: 600 }}>
+                            {pnlSign}{trade.pnl >= 0
+                              ? `+¥${Math.abs(trade.pnl).toFixed(0)}`
+                              : `-¥${Math.abs(trade.pnl).toFixed(0)}`}
+                          </span>
+                          <span className="trade-item-pct" style={{ color: pnlColor }}>
+                            {pnlSign}{trade.pnl_pct.toFixed(2)}%
+                          </span>
+                        </div>
+                      }
+                    >
+                      <div className="trade-item-main">
+                        <span className="trade-item-name">{trade.stock_name}</span>
+                        <Tag color="default" fill="outline" className="trade-item-code">
+                          {trade.stock_code}
+                        </Tag>
+                      </div>
+                      <div className="trade-item-sub">
+                        <span>{dayjs(trade.buy_time).format('MM/DD')} → {dayjs(trade.sell_time).format('MM/DD')}</span>
+                        <span>持仓 {trade.hold_days} 天</span>
+                        <span>×{trade.quantity.toLocaleString()} 股</span>
+                      </div>
+                    </List.Item>
+                  )
+                })}
+              </List>
+            </div>
+          )}
+        </div>
+      </Popup>
     </div>
   )
 }
