@@ -37,6 +37,14 @@ def _get_future_close(
     return future[days_ahead - 1].close_price
 
 
+def _get_ma5(price_list: list[MarketData], before_date) -> float | None:
+    """5-day moving average of close price strictly before before_date."""
+    prior = [m for m in price_list if m.trade_date < before_date]
+    if len(prior) < 5:
+        return None
+    return sum(m.close_price for m in prior[-5:]) / 5
+
+
 def _pair_trades(trades: list[TradeRecord]):
     buys: dict[str, list[TradeRecord]] = defaultdict(list)
     for t in sorted(trades, key=lambda x: x.trade_time):
@@ -54,38 +62,28 @@ def run_backtest(
 ) -> BacktestResult:
     price_map = _build_price_map(market_data)
 
-    pattern_map: dict[str, PatternResult] = {
-        p.pattern_type.value: p for p in patterns
-    }
-
-    slow_stop_ids = set(
-        pattern_map[PatternType.SLOW_STOP_LOSS.value].affected_trades
-    ) if PatternType.SLOW_STOP_LOSS.value in pattern_map else set()
-
-    early_profit_ids = set(
-        pattern_map[PatternType.EARLY_PROFIT_TAKE.value].affected_trades
-    ) if PatternType.EARLY_PROFIT_TAKE.value in pattern_map else set()
-
-    chase_high_ids = set(
-        pattern_map[PatternType.CHASE_HIGH.value].affected_trades
-    ) if PatternType.CHASE_HIGH.value in pattern_map else set()
-
     # Collect all trade pairs once
     all_pairs = list(_pair_trades(trades))
 
-    # ── Scenario 1: 止损线下调2% — sell at -6% instead of actual ───
+    # ── Scenario 1: 止损线下调2% ────────────────────────────────────
+    # Rule: for any trade where actual loss > 6%, simulate stopping at -6%.
+    # This is a direct calculation — no pattern ID matching needed.
     s1_original = 0.0
     s1_adjusted = 0.0
     s1_details: list[dict] = []
 
     for buy_t, sell_t in all_pairs:
         pnl = sell_t.pnl or 0.0
+        qty = buy_t.quantity or 0
+        buy_price = buy_t.price or 0.0
         buy_date = buy_t.trade_time.date().isoformat()
         sell_date = sell_t.trade_time.date().isoformat()
 
-        if (sell_t.id or 0) in slow_stop_ids:
-            # simulate selling at -6% loss instead of actual (< -8%)
-            simulated_pnl = -0.06 * buy_t.price * buy_t.quantity
+        pnl_pct = (sell_t.price - buy_price) / buy_price * 100 if buy_price else 0.0
+
+        if pnl_pct < -6.0:
+            # Stop out at -6% instead of the actual deeper loss
+            simulated_pnl = -0.06 * buy_price * qty
         else:
             simulated_pnl = pnl
 
@@ -96,7 +94,7 @@ def run_backtest(
             "stock": f"{sell_t.stock_code} {sell_t.stock_name}",
             "buy_date": buy_date,
             "sell_date": sell_date,
-            "buy_price": buy_t.price,
+            "buy_price": buy_price,
             "sell_price": sell_t.price,
             "original_pnl": round(pnl, 2),
             "adjusted_pnl": round(simulated_pnl, 2),
@@ -104,24 +102,35 @@ def run_backtest(
 
     s1_details.sort(key=lambda x: x["sell_date"])
 
-    # ── Scenario 2: 止盈线上调5% — hold 5 more days ────────────────
+    # ── Scenario 2: 止盈线上调5% ─────────────────────────────────────
+    # Rule: for profitable trades that gained between 1% and 20%,
+    # check if holding 5 more trading days would have yielded a higher price.
+    # If yes, use the future price; if no future data or price dropped, keep actual.
     s2_original = 0.0
     s2_adjusted = 0.0
     s2_details: list[dict] = []
 
     for buy_t, sell_t in all_pairs:
         pnl = sell_t.pnl or 0.0
+        qty = buy_t.quantity or 0
+        buy_price = buy_t.price or 0.0
+        sell_price = sell_t.price or 0.0
         buy_date = buy_t.trade_time.date().isoformat()
         sell_date_obj = sell_t.trade_time.date()
         sell_date = sell_date_obj.isoformat()
 
-        if (sell_t.id or 0) in early_profit_ids:
+        pnl_pct = (sell_price - buy_price) / buy_price * 100 if buy_price else 0.0
+
+        # Only apply to trades with modest gains (1%–20%): these are candidates
+        # where early profit-taking might have left money on the table.
+        if 1.0 < pnl_pct < 20.0:
             plist = price_map.get(sell_t.stock_code, [])
             future_close = _get_future_close(plist, sell_date_obj, 5)
-            if future_close is not None:
-                simulated_pnl = (future_close - buy_t.price) * buy_t.quantity
+            if future_close is not None and future_close > sell_price:
+                # Holding 5 more days would have been better — simulate it
+                simulated_pnl = (future_close - buy_price) * qty
             else:
-                simulated_pnl = pnl  # no data, keep original
+                simulated_pnl = pnl  # no improvement or no data
         else:
             simulated_pnl = pnl
 
@@ -132,25 +141,35 @@ def run_backtest(
             "stock": f"{sell_t.stock_code} {sell_t.stock_name}",
             "buy_date": buy_date,
             "sell_date": sell_date,
-            "buy_price": buy_t.price,
-            "sell_price": sell_t.price,
+            "buy_price": buy_price,
+            "sell_price": sell_price,
             "original_pnl": round(pnl, 2),
             "adjusted_pnl": round(simulated_pnl, 2),
         })
 
     s2_details.sort(key=lambda x: x["sell_date"])
 
-    # ── Scenario 3: 减少追高 — remove chase-high trades entirely ───
+    # ── Scenario 3: 减少追高 ─────────────────────────────────────────
+    # Rule: identify chase-high buys directly (buy price > MA5 * 1.03)
+    # Only avoid trades that were BOTH chase-high AND unprofitable.
+    # Profitable chase-high trades are kept — they were lucky but still made money.
     s3_original = 0.0
     s3_adjusted = 0.0
     s3_details: list[dict] = []
 
     for buy_t, sell_t in all_pairs:
         pnl = sell_t.pnl or 0.0
+        buy_price = buy_t.price or 0.0
         buy_date = buy_t.trade_time.date().isoformat()
         sell_date = sell_t.trade_time.date().isoformat()
 
-        if (buy_t.id or 0) in chase_high_ids:
+        plist = price_map.get(buy_t.stock_code, [])
+        ma5 = _get_ma5(plist, buy_t.trade_time.date())
+
+        is_chase_high = (ma5 is not None) and (buy_price > ma5 * 1.03)
+
+        if is_chase_high and pnl < 0:
+            # Avoided a bad chase-high trade — gain is the avoided loss
             simulated_pnl = 0.0
         else:
             simulated_pnl = pnl
@@ -162,7 +181,7 @@ def run_backtest(
             "stock": f"{buy_t.stock_code} {buy_t.stock_name}",
             "buy_date": buy_date,
             "sell_date": sell_date,
-            "buy_price": buy_t.price,
+            "buy_price": buy_price,
             "sell_price": sell_t.price,
             "original_pnl": round(pnl, 2),
             "adjusted_pnl": round(simulated_pnl, 2),
@@ -205,7 +224,7 @@ def run_backtest(
 
     scenarios.append(_make_scenario(
         name="止盈线上调5%",
-        description="对止盈过早的交易，模拟多持有5个交易日后卖出",
+        description="对小幅盈利的交易，模拟多持有5个交易日后卖出",
         param_change="持有时间: +5个交易日",
         original=s2_original,
         adjusted=s2_adjusted,
@@ -214,8 +233,8 @@ def run_backtest(
 
     scenarios.append(_make_scenario(
         name="减少追高",
-        description="移除追高买入的交易，避免高位接盘",
-        param_change="移除追高交易",
+        description="规避在5日均线3%以上追高买入且亏损的交易",
+        param_change="移除追高亏损交易",
         original=s3_original,
         adjusted=s3_adjusted,
         details=s3_details,
