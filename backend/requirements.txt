@@ -1,19 +1,10 @@
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-sqlalchemy>=2.0.0
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
-pandas>=2.1.0
-numpy>=1.26.0
-openai>=1.6.0
-python-dotenv>=1.0.0
-aiosqlite>=0.19.0
-asyncpg>=0.29.0
-psycopg2-binary>=2.9.0
-httpx>=0.25.0
+# 生产依赖（精确锁定版本，加速 Render 部署）
+-r requirements-prod.txt
+
+# ── 开发 / 本地 SQLite fallback ───────────────────────────────────────────────
+aiosqlite==0.22.1
+
+# ── 测试 ──────────────────────────────────────────────────────────────────────
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
-greenlet>=3.0.0
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
-python-multipart>=0.0.9
+psycopg2-binary==2.9.11

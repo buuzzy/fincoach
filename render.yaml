@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: fincoach-backend
+    runtime: python
+    region: singapore          # 最近东京 Supabase 的节点
+    plan: free
+    rootDir: backend
+    buildCommand: pip install --no-cache-dir -r requirements-prod.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: WEB_CONCURRENCY
+        value: 1                # 免费套餐单核，多 worker 反而竞争
+    healthCheckPath: /api/health
