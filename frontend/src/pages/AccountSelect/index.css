@@ -28,6 +28,7 @@
 .account-swiper-wrap {
   padding: 20px 0 8px;
   flex-shrink: 0;
+  overflow: hidden;  /* 防止两侧露出的卡片撑宽页面 */
 }
 
 /* antd-mobile Swiper override: show partial prev/next cards */
