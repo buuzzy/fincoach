@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import PrivateRoute from './components/PrivateRoute'
 import Login from './pages/Login'
+import AccountSelect from './pages/AccountSelect'
 import Home from './pages/Home'
 import Report from './pages/Report'
 import History from './pages/History'
@@ -14,6 +15,14 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route
             path="/"
+            element={
+              <PrivateRoute>
+                <AccountSelect />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/home/:userId"
             element={
               <PrivateRoute>
                 <Home />

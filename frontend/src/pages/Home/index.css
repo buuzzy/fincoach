@@ -13,6 +13,41 @@
   padding: 60px 0;
 }
 
+/* 账户信息展示卡 */
+.account-info-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--card-bg);
+  padding: 14px 16px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.account-info-label {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.account-info-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.account-info-broker {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.account-info-masked {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
 .form-item {
   display: flex;
   justify-content: space-between;
@@ -40,3 +75,4 @@
 .history-btn {
   margin-top: 12px;
 }
+
