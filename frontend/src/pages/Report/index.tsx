@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { NavBar, Toast, Card, Tag, Divider } from 'antd-mobile'
-import { getReport } from '../../services/api'
+import { getReport, generateReport } from '../../services/api'
 import { ApiError } from '../../services/api'
 import { ACCOUNT_MAP } from '../../constants/accounts'
 import type { ReportResponse } from '../../types'
@@ -41,6 +41,7 @@ function SuggestionList({ text }: { text: string }) {
 export default function Report() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const [report, setReport] = useState<ReportResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
@@ -49,6 +50,26 @@ export default function Report() {
   const startedAtRef = useRef<number>(Date.now())
 
   useEffect(() => {
+    // ── Pending mode: id === 'pending', need to call generate first ──
+    if (id === 'pending') {
+      const params = (location.state as any)?.params
+      if (!params) { navigate('/', { replace: true }); return }
+
+      generateReport(params)
+        .then((r) => {
+          // Replace URL with real report id, then start polling
+          navigate(`/report/${r.id}`, { replace: true })
+        })
+        .catch((err) => {
+          const msg = err instanceof ApiError ? err.message : '请求失败，请确认后端服务已启动'
+          setErrorMessage(msg)
+          setFetchError(true)
+          setLoading(false)
+          Toast.show({ icon: 'fail', content: msg, duration: 3000 })
+        })
+      return
+    }
+
     if (!id) return
 
     const fetchReport = async () => {
@@ -86,7 +107,7 @@ export default function Report() {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current)
     }
-  }, [id])
+  }, [id, location.state])
 
   const statusMap: Record<string, { text: string; color: string }> = {
     pending: { text: '等待中', color: 'default' },

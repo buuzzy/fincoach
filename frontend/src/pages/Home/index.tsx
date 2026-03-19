@@ -4,10 +4,8 @@ import {
   NavBar,
   Button,
   DatePicker,
-  Toast,
 } from 'antd-mobile'
 import dayjs from 'dayjs'
-import { generateReport, ApiError } from '../../services/api'
 import { ACCOUNT_MAP } from '../../constants/accounts'
 import './index.css'
 
@@ -17,7 +15,7 @@ export default function Home() {
   const userIdNum = Number(userId)
   const account = ACCOUNT_MAP[userIdNum]
 
-  const [generating, setGenerating] = useState(false)
+  const [generating, setGenerating] = useState(false)  // kept for future use
   // MVP: mock data covers 2025-01-01 ~ 2025-03-31
   const [periodStart, setPeriodStart] = useState<Date>(dayjs('2025-01-01').toDate())
   const [periodEnd, setPeriodEnd] = useState<Date>(dayjs('2025-03-31').toDate())
@@ -30,19 +28,13 @@ export default function Home() {
   }
 
   const handleGenerate = async () => {
-    setGenerating(true)
-    try {
-      const report = await generateReport({
-        user_id: userIdNum,
-        period_start: dayjs(periodStart).format('YYYY-MM-DD'),
-        period_end: dayjs(periodEnd).format('YYYY-MM-DD'),
-      })
-      navigate(`/report/${report.id}`)
-    } catch (err) {
-      const msg = err instanceof ApiError ? err.message : '请求失败，请确认后端服务已启动'
-      Toast.show({ content: msg, icon: 'fail' })
-      setGenerating(false)
+    const params = {
+      user_id: userIdNum,
+      period_start: dayjs(periodStart).format('YYYY-MM-DD'),
+      period_end: dayjs(periodEnd).format('YYYY-MM-DD'),
     }
+    // 立即跳转，让用户看到生成中间态，API 在后台继续
+    navigate('/report/pending', { state: { params } })
   }
 
   return (
@@ -96,7 +88,6 @@ export default function Home() {
           color="primary"
           size="large"
           className="generate-btn"
-          loading={generating}
           onClick={handleGenerate}
         >
           开始复盘分析
