@@ -8,6 +8,7 @@ export type PatternType =
   | 'slow_stop_loss'
   | 'over_trading'
   | 'hold_too_long'
+  | 'fee_drag'
 
 export type TradeDirection = 'buy' | 'sell'
 

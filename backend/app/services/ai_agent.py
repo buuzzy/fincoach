@@ -502,18 +502,32 @@ def _fallback_report(
 
 _SCENARIO_DESIGN_SYSTEM = (
     "你是A股量化策略分析师，根据账户特征为其量身设计2-3个回测策略场景。\n\n"
-    "可选策略类型及参数：\n"
+    "【A股市场背景】\n"
+    "- 交易品种：沪深A股（含主板、创业板、科创板），非期货、非虚拟货币\n"
+    "- 交易制度：T+1（当日买入次日才能卖出），无日内做空\n"
+    "- 手续费结构：\n"
+    "    买入：成交额 × 0.03%（佣金，部分券商更低）\n"
+    "    卖出：成交额 × 0.03%（佣金）+ 成交额 × 0.10%（印花税，仅卖出收取）\n"
+    "    一个完整来回最低成本约为成交额的 0.16%\n"
+    "- 短线交易参考定义：持仓 < 5个交易日通常被视为短线操作\n"
+    "- 分批建仓/分批止盈是合理行为，不应被视为频繁交易问题\n\n"
+    "【可选策略类型及参数】\n"
     "  stop_loss_tighten:     params.threshold_pct（止损线，如 -4 到 -7，默认-6）\n"
     "  profit_hold_extend:    params.hold_days（延长持有天数，如 3 到 15，默认5）\n"
     "  chase_high_avoid:      params.ma_multiplier（追高阈值，如 1.02 到 1.06，默认1.03）\n"
     "  trade_frequency_limit: params.max_per_week（每周最多交易次数，如 2 到 5，默认3）\n"
-    "  hold_duration_limit:   params.max_days（最长持仓天数，如 10 到 30，默认15）\n\n"
-    "选择原则：\n"
+    "  hold_duration_limit:   params.max_days（最长持仓天数，如 10 到 30，默认15）\n"
+    "  fee_drag_reduce:       params.max_holding_days（短线阈值天数，如 2 到 7，默认5）\n"
+    "                         params.fee_cover_multiplier（盈亏须覆盖手续费的倍数，如 1.5 到 3，默认2）\n\n"
+    "【选择原则】\n"
     "  - 只选择与该账户最相关的2-3个类型\n"
-    "  - 参数要根据账户实际数据个性化（如账户平均亏损-12%，止损就设-7%而非-6%）\n"
-    "  - llm_rationale 要引用账户具体数据说明为何选择该策略（50字内）\n"
-    "  - name 要简洁直观，体现个性化参数，如「收紧止损至-7%」\n\n"
-    "严格输出 JSON，禁止出现任何人名，用「该账户」指代：\n"
+    "  - 参数要根据账户实际数据个性化：\n"
+    "      * 账户平均持仓天数影响 max_holding_days（均值10天→阈值3天，均值3天→阈值1天）\n"
+    "      * 账户平均亏损幅度影响 threshold_pct（平均亏损-12%→止损设-7%）\n"
+    "      * 若检测到 fee_drag 模式，优先推荐 fee_drag_reduce 场景\n"
+    "  - llm_rationale 要引用账户具体数据说明为何选择该策略（50字内），禁止出现人名\n"
+    "  - name 要简洁直观，体现个性化参数，如「规避低效短线（持仓<3天）」\n\n"
+    "严格输出 JSON，用「该账户」指代，禁止出现任何人名：\n"
     '{"scenarios": [{"type": "...", "name": "...", "llm_rationale": "...", "params": {...}}, ...]}'
 )
 
@@ -551,6 +565,7 @@ async def design_backtest_scenarios(
             f"- 每周交易频率：{profile.trade_frequency_per_week:.1f}次\n"
             f"- 检测到的模式：{pattern_summary}\n"
             f"- 主要诊断问题：{'、'.join(diagnosis.primary_issues)}\n\n"
+            f"注意：该账户在沪深A股市场交易，T+1制度，手续费结构为买入0.03%+卖出0.13%（含印花税）。\n"
             f"请为该账户设计2-3个最有针对性的回测策略场景，以JSON输出。"
         )
 

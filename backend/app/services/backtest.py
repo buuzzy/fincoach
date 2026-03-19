@@ -1,11 +1,12 @@
 """Backtest engine — runs LLM-designed scenarios on historical trades.
 
-Five supported scenario types:
+Supported scenario types:
   stop_loss_tighten     params: threshold_pct (e.g. -5)
   profit_hold_extend    params: hold_days (e.g. 10)
   chase_high_avoid      params: ma_multiplier (e.g. 1.03)
   trade_frequency_limit params: max_per_week (e.g. 3)
   hold_duration_limit   params: max_days (e.g. 15)
+  fee_drag_reduce       params: max_holding_days (e.g. 5), fee_cover_multiplier (e.g. 2.0)
 """
 
 from __future__ import annotations
@@ -21,6 +22,16 @@ from app.models import (
     BacktestScenarioConfig,
     BacktestResult,
 )
+
+# A股手续费常数（与 pattern.py 保持一致）
+_COMMISSION_RATE = 0.0003   # 佣金 0.03%（买卖双向）
+_STAMP_DUTY_RATE  = 0.001   # 印花税 0.10%（仅卖出）
+
+def _buy_fee(amount: float) -> float:
+    return amount * _COMMISSION_RATE
+
+def _sell_fee(amount: float) -> float:
+    return amount * (_COMMISSION_RATE + _STAMP_DUTY_RATE)
 
 
 # ── Market data helpers ──────────────────────────────────────────────────────
@@ -178,7 +189,7 @@ def _run_trade_frequency_limit(
 def _run_hold_duration_limit(
     pairs: list[tuple[TradeRecord, TradeRecord]],
     price_map: dict[str, list[MarketData]],
-    max_days: int,  # e.g. 15 — force sell at close on day max_days if still holding
+    max_days: int,
 ) -> tuple[float, float, list[dict]]:
     """Simulate force-selling losing positions at close on day max_days."""
     orig_total = adj_total = 0.0
@@ -191,15 +202,51 @@ def _run_hold_duration_limit(
         holding_days = (sell_t.trade_time - buy_t.trade_time).days
 
         sim_pnl = pnl
-        # Only apply to losing positions held longer than max_days
         if pnl < 0 and holding_days > max_days:
             plist = price_map.get(buy_t.stock_code, [])
             forced_date = buy_t.trade_time.date() + timedelta(days=max_days)
-            # Find the closest available close on or after forced_date
             candidates = [m for m in plist if m.trade_date >= forced_date]
             if candidates:
                 forced_close = candidates[0].close_price
                 sim_pnl = (forced_close - buy_price) * qty
+
+        orig_total += pnl
+        adj_total += sim_pnl
+        details.append(_detail(buy_t, sell_t, pnl, sim_pnl))
+
+    return orig_total, adj_total, details
+
+
+def _run_fee_drag_reduce(
+    pairs: list[tuple[TradeRecord, TradeRecord]],
+    price_map: dict[str, list[MarketData]],
+    max_holding_days: int = 5,
+    fee_cover_multiplier: float = 2.0,
+) -> tuple[float, float, list[dict]]:
+    """Simulate avoiding trades where |pnl| < estimated round-trip fee × multiplier
+    AND holding period < max_holding_days.
+
+    These are 'inefficient short-term trades' where transaction costs erode returns.
+    Improvement = avoided losses + saved fees on near-zero-profit trades.
+    """
+    orig_total = adj_total = 0.0
+    details: list[dict] = []
+
+    for buy_t, sell_t in pairs:
+        pnl = sell_t.pnl or 0.0
+        buy_price = buy_t.price or 0.0
+        qty = buy_t.quantity or 0
+        holding_days = (sell_t.trade_time - buy_t.trade_time).days
+
+        buy_amount = buy_price * qty
+        sell_amount = (sell_t.price or 0.0) * qty
+        round_trip_fee = _buy_fee(buy_amount) + _sell_fee(sell_amount)
+
+        # Skip if this trade didn't cover its own costs AND was short-term
+        if holding_days < max_holding_days and abs(pnl) < round_trip_fee * fee_cover_multiplier:
+            sim_pnl = 0.0  # trade not executed — avoid the loss and save the fee
+        else:
+            sim_pnl = pnl
 
         orig_total += pnl
         adj_total += sim_pnl
@@ -231,6 +278,7 @@ _SCENARIO_FN = {
     "chase_high_avoid":      _run_chase_high_avoid,
     "trade_frequency_limit": _run_trade_frequency_limit,
     "hold_duration_limit":   _run_hold_duration_limit,
+    "fee_drag_reduce":       _run_fee_drag_reduce,
 }
 
 _DEFAULT_PARAMS = {
@@ -239,6 +287,7 @@ _DEFAULT_PARAMS = {
     "chase_high_avoid":      {"ma_multiplier": 1.03},
     "trade_frequency_limit": {"max_per_week": 3},
     "hold_duration_limit":   {"max_days": 15},
+    "fee_drag_reduce":       {"max_holding_days": 5, "fee_cover_multiplier": 2.0},
 }
 
 _DEFAULT_DESCRIPTIONS = {
@@ -247,6 +296,7 @@ _DEFAULT_DESCRIPTIONS = {
     "chase_high_avoid":      "规避追高亏损交易",
     "trade_frequency_limit": "控制每周交易频率",
     "hold_duration_limit":   "限制亏损仓位持仓时长",
+    "fee_drag_reduce":       "规避盈亏未能覆盖手续费的低效短线交易",
 }
 
 
@@ -261,6 +311,8 @@ def _param_change_str(stype: str, params: dict) -> str:
         return f"每周最多: {params.get('max_per_week', 3)}次"
     if stype == "hold_duration_limit":
         return f"最长持仓: {params.get('max_days', 15)}天"
+    if stype == "fee_drag_reduce":
+        return f"短线阈值: 持仓 < {params.get('max_holding_days', 5)}天且未覆盖手续费"
     return ""
 
 

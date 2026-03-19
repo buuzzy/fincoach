@@ -27,8 +27,9 @@ class PatternType(str, enum.Enum):
     CHASE_HIGH = "chase_high"            # 追高买入
     EARLY_PROFIT_TAKE = "early_profit"   # 止盈过早
     SLOW_STOP_LOSS = "slow_stop_loss"    # 止损过慢
-    OVER_TRADING = "over_trading"        # 频繁交易
+    OVER_TRADING = "over_trading"        # 频繁交易（保留兼容旧数据）
     HOLD_TOO_LONG = "hold_too_long"      # 持仓过久
+    FEE_DRAG = "fee_drag"                # 手续费侵蚀（低效短线交易）
 
 class TradeDirection(str, enum.Enum):
     BUY = "buy"

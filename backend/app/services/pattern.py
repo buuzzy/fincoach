@@ -1,4 +1,4 @@
-"""Pattern recognition engine — detects 5 core trading anti-patterns."""
+"""Pattern recognition engine — detects core trading anti-patterns."""
 
 from __future__ import annotations
 
@@ -12,6 +12,24 @@ from app.models import (
     PatternType,
     PatternResult,
 )
+
+# ─── A股手续费常数 ──────────────────────────────────────────────────
+# 佣金率（买卖双向，取行业保守估算）
+_COMMISSION_RATE = 0.0003        # 0.03%
+# 印花税（仅卖出方向，固定）
+_STAMP_DUTY_RATE = 0.001         # 0.10%
+# 手续费侵蚀率触发阈值
+_FEE_DRAG_RATIO_THRESHOLD = 0.20  # 手续费 / 毛利润 > 20%
+
+
+def _buy_fee(amount: float) -> float:
+    """估算买入手续费：仅佣金，无印花税。"""
+    return amount * _COMMISSION_RATE
+
+
+def _sell_fee(amount: float) -> float:
+    """估算卖出手续费：佣金 + 印花税。"""
+    return amount * (_COMMISSION_RATE + _STAMP_DUTY_RATE)
 
 
 def _build_price_map(
@@ -95,6 +113,12 @@ def detect_patterns(
     hold_too_long_impact: float = 0.0
     hold_too_long_examples: list[dict] = []
 
+    # fee_drag 中间数据
+    total_estimated_fee: float = 0.0   # 所有已平仓交易的估算手续费合计
+    total_gross_profit: float = 0.0    # 所有盈利笔的毛利润合计
+    fee_drag_ids: list[int] = []
+    fee_drag_examples: list[dict] = []
+
     for buy_t, sell_t in _pair_trades(trades):
         code = buy_t.stock_code
         plist = price_map.get(code, [])
@@ -174,37 +198,44 @@ def detect_patterns(
                 "pnl": round(pnl, 2),
             })
 
-    # 4. over_trading — >5 trades per week for consecutive weeks
-    trades_by_week: dict[str, int] = defaultdict(int)
-    for t in trades:
-        iso_year, iso_week, _ = t.trade_time.isocalendar()
-        key = f"{iso_year}-W{iso_week:02d}"
-        trades_by_week[key] += 1
+        # 6. fee_drag — 累计手续费侵蚀统计（已平仓交易）
+        buy_amount = buy_t.price * buy_t.quantity
+        sell_amount = sell_t.price * sell_t.quantity
+        round_trip_fee = _buy_fee(buy_amount) + _sell_fee(sell_amount)
+        total_estimated_fee += round_trip_fee
+        if pnl > 0:
+            total_gross_profit += pnl
 
-    sorted_weeks = sorted(trades_by_week.keys())
-    over_trading_weeks: list[str] = []
-    consecutive = 0
-    for wk in sorted_weeks:
-        if trades_by_week[wk] > 5:
-            consecutive += 1
-            if consecutive >= 2:
-                if wk not in over_trading_weeks:
-                    over_trading_weeks.append(wk)
-                # also add the prior one if not already
-                idx = sorted_weeks.index(wk)
-                prev_wk = sorted_weeks[idx - 1]
-                if prev_wk not in over_trading_weeks:
-                    over_trading_weeks.append(prev_wk)
-        else:
-            consecutive = 0
+    # ── fee_drag：整体手续费侵蚀率超标时，找出「低效短线」交易 ───────
+    # 低效短线 = 持仓 < 5天 AND |盈亏| < 该笔来回手续费 × 2
+    # 触发条件：总手续费 / 总毛利润 > 20%
+    fee_drag_ratio = (
+        total_estimated_fee / total_gross_profit
+        if total_gross_profit > 0 else 0.0
+    )
 
-    over_trading_trade_ids = []
-    if over_trading_weeks:
-        for t in trades:
-            iso_year, iso_week, _ = t.trade_time.isocalendar()
-            key = f"{iso_year}-W{iso_week:02d}"
-            if key in over_trading_weeks:
-                over_trading_trade_ids.append(t.id or 0)
+    if fee_drag_ratio > _FEE_DRAG_RATIO_THRESHOLD:
+        for buy_t, sell_t in _pair_trades(trades):
+            pnl = sell_t.pnl or 0.0
+            holding_days = (sell_t.trade_time - buy_t.trade_time).days
+            buy_amount = buy_t.price * buy_t.quantity
+            sell_amount = sell_t.price * sell_t.quantity
+            round_trip_fee = _buy_fee(buy_amount) + _sell_fee(sell_amount)
+
+            if holding_days < 5 and abs(pnl) < round_trip_fee * 2:
+                trade_id = sell_t.id or 0
+                fee_drag_ids.append(trade_id)
+                fee_drag_examples.append({
+                    "trade_id": trade_id,
+                    "stock": f"{sell_t.stock_code} {sell_t.stock_name}",
+                    "buy_date": buy_t.trade_time.date().isoformat(),
+                    "sell_date": sell_t.trade_time.date().isoformat(),
+                    "buy_price": buy_t.price,
+                    "sell_price": sell_t.price,
+                    "holding_days": holding_days,
+                    "pnl": round(pnl, 2),
+                    "estimated_fee": round(round_trip_fee, 2),
+                })
 
     # --- assemble results ---
     results: list[PatternResult] = []
@@ -266,6 +297,22 @@ def detect_patterns(
             total_impact=round(hold_too_long_impact, 2),
             description="持仓超过20个交易日且仍为亏损状态",
             examples=hold_too_long_examples[:3],
+        ))
+
+    if fee_drag_ids:
+        fee_drag_examples.sort(key=lambda x: abs(x.get("pnl", 0)))
+        results.append(PatternResult(
+            pattern_type=PatternType.FEE_DRAG,
+            pattern_name="手续费侵蚀",
+            occurrences=len(fee_drag_ids),
+            affected_trades=fee_drag_ids,
+            total_impact=round(-total_estimated_fee, 2),  # 负值：手续费是成本
+            description=(
+                f"估算手续费合计 {total_estimated_fee:,.0f} 元，"
+                f"占毛利润的 {fee_drag_ratio * 100:.1f}%，"
+                f"其中 {len(fee_drag_ids)} 笔短线交易盈亏未能覆盖交易成本"
+            ),
+            examples=fee_drag_examples[:3],
         ))
 
     return results

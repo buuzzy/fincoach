@@ -14,6 +14,7 @@ const patternColorMap: Record<string, string> = {
   slow_stop_loss: '#ff7a45',
   over_trading: '#722ed1',
   hold_too_long: '#13c2c2',
+  fee_drag: '#eb2f96',
 }
 
 const patternIconMap: Record<string, string> = {
@@ -22,6 +23,7 @@ const patternIconMap: Record<string, string> = {
   slow_stop_loss: '🐌',
   over_trading: '⚡',
   hold_too_long: '⏰',
+  fee_drag: '💸',
 }
 
 export default function PatternSwiper({ patterns }: Props) {
