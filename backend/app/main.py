@@ -53,10 +53,12 @@ async def _seed_if_needed(force: bool = False) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: init DB, init QVeris KeyPool, then seed as a background task."""
-    await init_db()
+    try:
+        await init_db()
+    except Exception as exc:
+        logger.error("[startup] init_db failed: %s — continuing anyway", exc)
 
-    # Initialise the QVeris key pool from settings
-    settings_obj = None
+    force_reseed = False
     try:
         from app.core.config import get_settings
         from app.services.qveris_client import init_key_pool
@@ -67,13 +69,15 @@ async def lifespan(app: FastAPI):
             init_key_pool(keys, settings_obj.QVERIS_BASE_URL)
         else:
             logger.warning("[startup] No QVERIS_API_KEY configured — QVeris tools disabled.")
+        force_reseed = settings_obj.FORCE_RESEED
     except Exception as exc:
         logger.error("[startup] Failed to init QVeris KeyPool: %s", exc)
 
-    force_reseed = settings_obj.FORCE_RESEED if settings_obj else False
-
-    # Fire-and-forget: seed runs concurrently with the server accepting requests
-    asyncio.get_event_loop().create_task(_seed_if_needed(force=force_reseed))
+    # Fire-and-forget: use asyncio.ensure_future (safe in all Python 3.10+ async contexts)
+    try:
+        asyncio.ensure_future(_seed_if_needed(force=force_reseed))
+    except Exception as exc:
+        logger.error("[startup] Failed to schedule seed task: %s", exc)
 
     yield
 
