@@ -227,7 +227,7 @@ def _truncate_data(data: Any, max_rows: int = KLINE_WINDOW) -> Any:
 def _build_system_prompt() -> str:
     return (
         "你是A股交易教练，可以调用工具获取实时行情数据辅助分析。\n\n"
-        "重要：所有输出文本中，请用「该账户」指代交易者，禁止出现任何人名。\n\n"
+        "重要：所有输出文本中，请用「该账户」指代交易者，禁止出现任何人名，包括 summary、suggestions、style_description、pattern_examples 所有字段。\n\n"
         "输出严格 JSON：\n"
         '{\n'
         '  "summary": "本期交易总结（200字内，客观陈述数据与表现）",\n'
