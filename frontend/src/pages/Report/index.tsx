@@ -12,28 +12,38 @@ import PnlChart from '../../components/Charts/PnlChart'
 import GeneratingProgress from '../../components/GeneratingProgress'
 import './index.css'
 
-/** 把 LLM 返回的建议文本渲染成分条列表。
- *  支持 "1. xxx" / "- xxx" 开头，或纯换行分段。
+/**
+ * Strip JSON blocks, code fences, and markdown formatting from LLM output.
+ * Defensive filter — backend should already clean, this is the safety net.
  */
+function cleanAiText(raw: string): string {
+  return raw
+    .replace(/```[\w]*\n?/g, '')                        // code fences
+    .replace(/#{1,6}\s?/g, '')                           // ## headers
+    .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')             // **bold** / *italic*
+    .replace(/\{[\s\S]*?\}/g, '')                        // {...} JSON blocks
+    .replace(/\n{3,}/g, '\n\n')                          // collapse blank lines
+    .trim()
+}
+
 function SuggestionList({ text }: { text: string }) {
-  const lines = text
+  const cleaned = cleanAiText(text)
+  const lines = cleaned
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l.length > 0)
 
-  // 去掉行首的序号前缀 "1." / "1、" / "-" / "•"
-  const clean = (line: string) =>
-    line.replace(/^[\d]+[.、\)]\s*/, '').replace(/^[-•]\s*/, '').trim()
+  const stripPrefix = (line: string) =>
+    line.replace(/^[\d]+[.、\)]\s*/, '').replace(/^[-•①②③④⑤⑥⑦⑧⑨⑩]\s*/, '').trim()
 
   if (lines.length <= 1) {
-    // 只有一行，直接段落展示
-    return <p className="ai-text">{text}</p>
+    return <p className="ai-text">{cleaned}</p>
   }
 
   return (
     <ul className="suggestion-list">
       {lines.map((line, i) => (
-        <li key={i}>{clean(line)}</li>
+        <li key={i}>{stripPrefix(line)}</li>
       ))}
     </ul>
   )
@@ -165,7 +175,7 @@ export default function Report() {
             {report.ai_style_description && (
               <div className="style-description-card">
                 <div className="card-title">📊 本期交易风格</div>
-                <p>{report.ai_style_description}</p>
+                <p>{cleanAiText(report.ai_style_description)}</p>
               </div>
             )}
 
@@ -280,7 +290,7 @@ export default function Report() {
             {report.ai_summary && (
               <section className="report-section">
                 <Card title="AI 复盘总结">
-                  <p className="ai-text">{report.ai_summary}</p>
+                  <p className="ai-text">{cleanAiText(report.ai_summary)}</p>
                 </Card>
               </section>
             )}

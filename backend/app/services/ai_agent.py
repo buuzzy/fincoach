@@ -230,22 +230,26 @@ def _truncate_data(data: Any, max_rows: int = KLINE_WINDOW) -> Any:
 def _build_system_prompt() -> str:
     return (
         "你是A股交易教练，可以调用工具获取实时行情数据辅助分析。\n\n"
-        "重要：所有输出文本中，请用「该账户」指代交易者，禁止出现任何人名，包括 summary、suggestions、style_description、pattern_examples、backtest_interpretations 所有字段。\n\n"
-        "输出严格 JSON：\n"
+        "重要：所有输出文本中，请用「该账户」指代交易者，禁止出现任何人名。\n\n"
+        "输出格式要求（极其重要）：\n"
+        "1. 只输出一个 JSON 对象，不要在 JSON 前后添加任何文字、说明或引导语\n"
+        "2. 每个字段的值必须是纯文本字符串，禁止包含 Markdown 格式"
+        "（如 ** # - 等），禁止嵌套 JSON\n"
+        "3. summary 和 suggestions 中用序号分段（①②③ 或 1. 2. 3.），换行分隔\n\n"
+        "JSON 结构：\n"
         '{\n'
-        '  "summary": "本期交易总结（200字内，客观陈述数据与表现）",\n'
-        '  "suggestions": "改进建议（200字内，具体可操作）",\n'
-        '  "style_description": "交易行为描述（100字内，描述行为如持仓时长/频率，禁用激进型等人格标签）",\n'
+        '  "summary": "本期交易总结（200字内，客观陈述数据与表现，用①②③分段）",\n'
+        '  "suggestions": "改进建议（200字内，具体可操作，用1. 2. 3.分条）",\n'
+        '  "style_description": "交易行为描述（100字内，描述持仓时长/频率等行为特征，禁用激进型等人格标签）",\n'
         '  "pattern_examples": {\n'
         '    "<pattern_type>": "该pattern典型案例的点评（80字内，结合具体股票和数据）"\n'
         '  },\n'
         '  "backtest_interpretations": {\n'
-        '    "<scenario_name>": "对该回测场景结果的个性化解读（80字内，说明为何对该账户有效或局限性）"\n'
+        '    "<scenario_name>": "对该回测场景结果的个性化解读（80字内）"\n'
         '  }\n'
-        '}\n'
-        'pattern_examples 仅包含本次报告检测到的 pattern。\n'
-        'backtest_interpretations 仅包含本次报告运行的回测场景名称作为 key。\n'
-        "style_description 示例：'该账户平均持仓3天，周均操作5次，多数盈利交易在3天内完成，亏损交易持仓明显偏长。'"
+        '}\n\n'
+        "pattern_examples 仅包含本次报告检测到的 pattern。\n"
+        "backtest_interpretations 仅包含本次报告运行的回测场景名称作为 key。"
     )
 
 
@@ -387,6 +391,26 @@ def _extract_date_range(
 # ── JSON parsing helper ────────────────────────────────────────────────────────
 
 
+def _clean_display_text(text: str) -> str:
+    """Strip JSON, code fences, markdown formatting from LLM output text."""
+    import re
+
+    s = text.strip()
+    # Remove code fences: ```json ... ``` or ``` ... ```
+    s = re.sub(r'```[\w]*\n?', '', s)
+    # Remove markdown headers
+    s = re.sub(r'#{1,6}\s?', '', s)
+    # Remove bold / italic markers
+    s = re.sub(r'\*{1,2}([^*]+)\*{1,2}', r'\1', s)
+    # Remove markdown list prefixes
+    s = re.sub(r'^[-*]\s', '', s, flags=re.MULTILINE)
+    # Remove inline JSON-like fragments: {"key": "value", ...}
+    s = re.sub(r'\{[^{}]*\}', '', s)
+    # Collapse multiple blank lines
+    s = re.sub(r'\n{3,}', '\n\n', s)
+    return s.strip()
+
+
 def _parse_json_response(content: str) -> AIReportResult:
     """Extract AIReportResult from an LLM JSON response string."""
     cleaned = content.strip()
@@ -410,11 +434,15 @@ def _parse_json_response(content: str) -> AIReportResult:
 
     data = json.loads(cleaned)
     return AIReportResult(
-        summary=data.get("summary", ""),
-        suggestions=data.get("suggestions", ""),
-        style_description=data.get("style_description", ""),
-        pattern_examples=data.get("pattern_examples", {}),
-        backtest_interpretations=data.get("backtest_interpretations", {}),
+        summary=_clean_display_text(data.get("summary", "")),
+        suggestions=_clean_display_text(data.get("suggestions", "")),
+        style_description=_clean_display_text(data.get("style_description", "")),
+        pattern_examples={
+            k: _clean_display_text(v) for k, v in data.get("pattern_examples", {}).items()
+        },
+        backtest_interpretations={
+            k: _clean_display_text(v) for k, v in data.get("backtest_interpretations", {}).items()
+        },
     )
 
 
@@ -704,15 +732,17 @@ async def _run_tool_use_agent(
         )
 
         if finish_reason == "stop" or not assistant_message.tool_calls:
-            # Agent is done — extract final answer
             content = assistant_message.content or ""
             try:
                 return _parse_json_response(content)
             except (json.JSONDecodeError, KeyError) as parse_err:
                 logger.warning(
-                    "[AI Agent] JSON parse failed: %s — returning raw content", parse_err
+                    "[AI Agent] JSON parse failed: %s — cleaning raw content", parse_err
                 )
-                return AIReportResult(summary=content, suggestions="")
+                return AIReportResult(
+                    summary=_clean_display_text(content),
+                    suggestions="",
+                )
 
         # ── Execute tool calls in parallel ─────────────────────────────────────
         tool_calls = assistant_message.tool_calls
@@ -781,6 +811,9 @@ async def _run_tool_use_agent(
         return _parse_json_response(content)
     except (json.JSONDecodeError, KeyError) as parse_err:
         logger.warning(
-            "[AI Agent] Final JSON parse failed: %s — returning raw content", parse_err
+            "[AI Agent] Final JSON parse failed: %s — cleaning raw content", parse_err
         )
-        return AIReportResult(summary=content, suggestions="")
+        return AIReportResult(
+            summary=_clean_display_text(content),
+            suggestions="",
+        )
