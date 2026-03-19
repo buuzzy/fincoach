@@ -113,11 +113,66 @@
 .gen-step.active .gen-step-label { color: var(--primary-color); }
 .gen-step.pending .gen-step-label { color: var(--text-tertiary); }
 
-.gen-step-detail {
+/* Sub-steps (agent-style task list) */
+.gen-sub-steps {
+  margin-top: 6px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gen-sub-step {
   font-size: 12px;
-  color: var(--text-secondary);
-  margin-top: 2px;
-  margin-bottom: 6px;
+  line-height: 1.6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  animation: gen-sub-fade-in 0.4s ease-out;
+}
+
+.gen-sub-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.gen-sub-dot.done {
+  background: var(--success-color);
+}
+
+.gen-sub-dot.running {
+  background: var(--primary-color);
+  animation: gen-pulse 1s ease-in-out infinite;
+}
+
+.gen-sub-step.completed .gen-sub-text {
+  color: var(--text-tertiary);
+}
+
+.gen-sub-step.latest .gen-sub-text {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.gen-sub-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  background: var(--primary-color);
+  margin-left: 2px;
+  animation: gen-cursor-blink 0.8s step-end infinite;
+}
+
+@keyframes gen-sub-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gen-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
 }
 
 /* Progress bar */

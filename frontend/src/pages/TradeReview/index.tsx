@@ -10,9 +10,37 @@ import type { TradeReviewResponse } from '../../types'
 import './index.css'
 
 const REVIEW_STEPS: ProgressStep[] = [
-  { label: '获取K线数据',    detail: '读取持仓期间个股与大盘走势…', durationMs: 2000  },
-  { label: '读取相关资讯',    detail: '检索持仓期间新闻与公告…',     durationMs: 4000  },
-  { label: 'AI 情景还原',    detail: '调用大模型还原交易情景…',     durationMs: 20000 },
+  {
+    label: '获取行情数据',
+    detail: '读取持仓期间个股与大盘走势…',
+    subSteps: [
+      { text: '拉取个股持仓期间日 K 线数据', delayMs: 0 },
+      { text: '拉取上证指数同期走势数据', delayMs: 500 },
+      { text: '计算逐日涨跌幅与成交量变化', delayMs: 1200 },
+    ],
+    durationMs: 2000,
+  },
+  {
+    label: '检索相关资讯',
+    detail: '检索持仓期间新闻与公告…',
+    subSteps: [
+      { text: '检索个股持仓期间相关新闻', delayMs: 0 },
+      { text: '匹配板块与行业动态资讯', delayMs: 600 },
+      { text: '按时间线整理资讯摘要', delayMs: 1200 },
+    ],
+    durationMs: 4000,
+  },
+  {
+    label: 'AI 情景还原',
+    detail: '调用大模型还原交易情景…',
+    subSteps: [
+      { text: '构建交易情景上下文（K线 + 大盘 + 资讯）', delayMs: 0 },
+      { text: '分析个股与大盘的相对强弱表现', delayMs: 2000 },
+      { text: 'AI 生成买入背景与持仓过程分析', delayMs: 6000 },
+      { text: 'AI 撰写卖出时点与交易结果总结', delayMs: 12000 },
+    ],
+    durationMs: 20000,
+  },
 ]
 
 function formatVolume(v: number): string {
