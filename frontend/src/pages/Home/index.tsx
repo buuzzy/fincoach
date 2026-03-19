@@ -8,16 +8,8 @@ import {
 } from 'antd-mobile'
 import dayjs from 'dayjs'
 import { generateReport, ApiError } from '../../services/api'
+import { ACCOUNT_MAP } from '../../constants/accounts'
 import './index.css'
-
-// 账户信息映射（与 AccountSelect 保持一致）
-const ACCOUNT_MAP: Record<number, { brokerName: string; maskedAccount: string }> = {
-  1: { brokerName: '华泰证券',     maskedAccount: '****3821' },
-  2: { brokerName: '招商证券',     maskedAccount: '****0712' },
-  3: { brokerName: '东方财富证券', maskedAccount: '****5967' },
-  4: { brokerName: '中信证券',     maskedAccount: '****2483' },
-  5: { brokerName: '国泰海通证券', maskedAccount: '****8156' },
-}
 
 export default function Home() {
   const navigate = useNavigate()

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { NavBar, Toast, Card, Tag, Divider } from 'antd-mobile'
 import { getReport } from '../../services/api'
 import { ApiError } from '../../services/api'
+import { ACCOUNT_MAP } from '../../constants/accounts'
 import type { ReportResponse } from '../../types'
 import PatternSwiper from '../../components/PatternCard/PatternSwiper'
 import BacktestChart from '../../components/Charts/BacktestChart'
@@ -95,11 +96,12 @@ export default function Report() {
   }
 
   const statusInfo = statusMap[report?.status ?? 'pending']
+  const account = report ? ACCOUNT_MAP[report.user_id] : null
 
   return (
     <div className="report-page">
       <NavBar onBack={() => navigate(-1)}>
-        复盘报告
+        {account ? `${account.brokerName} ${account.maskedAccount}` : '复盘报告'}
         {report && (
           <Tag color={statusInfo.color} style={{ marginLeft: 8 }}>
             {statusInfo.text}

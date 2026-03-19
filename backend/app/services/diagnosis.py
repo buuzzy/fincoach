@@ -28,7 +28,7 @@ def diagnose(
             patterns=[],
             primary_issues=[],
             severity_score=0.0,
-            summary=f"用户 {profile.user_name} 的交易记录中未发现明显的不良交易模式，继续保持！",
+            summary=f"该账户的交易记录中未发现明显的不良交易模式，继续保持！",
             data_warning=(
                 "insufficient" if profile.trade_count < 10
                 else ("preliminary" if profile.trade_count < 30 else None)
@@ -63,8 +63,7 @@ def diagnose(
     # --- summary text ---
     issue_str = "、".join(primary_issues)
     summary_parts = [
-        f"用户 {profile.user_name}（{profile.profile_type.value} 类型）",
-        f"在分析期间共完成 {profile.trade_count} 笔交易，",
+        f"该账户在分析期间共完成 {profile.trade_count} 笔交易，",
         f"胜率 {profile.win_rate:.1%}，总盈亏 {profile.total_pnl:,.2f} 元。",
         f"主要问题：{issue_str}。",
         f"严重程度评分：{severity_score}/100。",

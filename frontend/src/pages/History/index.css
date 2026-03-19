@@ -47,10 +47,22 @@
   margin-bottom: 4px;
 }
 
-.rc-user {
+.rc-account {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rc-broker {
   font-size: 15px;
   font-weight: 600;
   color: #222;
+}
+
+.rc-masked {
+  font-size: 11px;
+  color: #aaa;
+  font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
 .rc-status {

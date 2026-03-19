@@ -19,100 +19,29 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useAuth } from '../../contexts/AuthContext'
+import { ACCOUNTS, ACCOUNT_MAP, formatPnl, type AccountInfo } from '../../constants/accounts'
 import './index.css'
 
-// ── 账户基础数据 ──────────────────────────────────────────────────────────────
-
-interface AccountInfo {
-  userId: number
-  brokerName: string
-  maskedAccount: string
-  logoColor: string
-  logoText: string
-  totalPnl: number
-  winRate: number
-  tradePairs: number
-}
-
-const BASE_ACCOUNTS: AccountInfo[] = [
-  {
-    userId: 1,
-    brokerName: '华泰证券',
-    maskedAccount: '****3821',
-    logoColor: '#e8652a',
-    logoText: '华泰',
-    totalPnl: -66283,
-    winRate: 35.9,
-    tradePairs: 39,
-  },
-  {
-    userId: 2,
-    brokerName: '招商证券',
-    maskedAccount: '****0712',
-    logoColor: '#c1272d',
-    logoText: '招商',
-    totalPnl: 147807,
-    winRate: 75.0,
-    tradePairs: 16,
-  },
-  {
-    userId: 3,
-    brokerName: '东方财富证券',
-    maskedAccount: '****5967',
-    logoColor: '#e05b16',
-    logoText: '东财',
-    totalPnl: 16896,
-    winRate: 55.6,
-    tradePairs: 27,
-  },
-  {
-    userId: 4,
-    brokerName: '中信证券',
-    maskedAccount: '****2483',
-    logoColor: '#1a3fa3',
-    logoText: '中信',
-    totalPnl: 86209,
-    winRate: 54.2,
-    tradePairs: 24,
-  },
-  {
-    userId: 5,
-    brokerName: '国泰海通证券',
-    maskedAccount: '****8156',
-    logoColor: '#0e7a4c',
-    logoText: '海通',
-    totalPnl: -883,
-    winRate: 50.0,
-    tradePairs: 4,
-  },
-]
+// ── 排序持久化 ────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'tm_account_order'
 
 function loadOrder(): number[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return BASE_ACCOUNTS.map((a) => a.userId)
+    if (!raw) return ACCOUNTS.map((a) => a.userId)
     const parsed: number[] = JSON.parse(raw)
-    // 确保包含所有 userId，新增账户时兜底
-    const all = BASE_ACCOUNTS.map((a) => a.userId)
+    const all = ACCOUNTS.map((a) => a.userId)
     const valid = parsed.filter((id) => all.includes(id))
     const missing = all.filter((id) => !valid.includes(id))
     return [...valid, ...missing]
   } catch {
-    return BASE_ACCOUNTS.map((a) => a.userId)
+    return ACCOUNTS.map((a) => a.userId)
   }
 }
 
 function saveOrder(order: number[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(order))
-}
-
-function formatPnl(pnl: number): string {
-  const abs = Math.abs(pnl)
-  const sign = pnl >= 0 ? '+' : '-'
-  if (abs >= 10000) return `${sign}¥${(abs / 10000).toFixed(2)}万`
-  return `${sign}¥${abs.toFixed(0)}`
 }
 
 // ── 可拖拽排序项 ──────────────────────────────────────────────────────────────
@@ -132,24 +61,14 @@ function SortableItem({ account }: { account: AccountInfo }) {
       style={style}
       className={`sort-item${isDragging ? ' sort-dragging' : ''}`}
     >
-      <div
-        className="sort-item-logo"
-        style={{ background: account.logoColor }}
-      >
+      <div className="sort-item-logo" style={{ background: account.logoColor }}>
         {account.logoText}
       </div>
       <div className="sort-item-info">
         <div className="sort-item-broker">{account.brokerName}</div>
         <div className="sort-item-masked">{account.maskedAccount}</div>
       </div>
-      {/* 拖拽把手 */}
-      <span
-        className="sort-item-handle"
-        {...attributes}
-        {...listeners}
-      >
-        ☰
-      </span>
+      <span className="sort-item-handle" {...attributes} {...listeners}>☰</span>
     </div>
   )
 }
@@ -164,9 +83,8 @@ export default function AccountSelect() {
   const [sortMode, setSortMode] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
 
-  // 按 order 排列账户
   const sortedAccounts = order
-    .map((id) => BASE_ACCOUNTS.find((a) => a.userId === id))
+    .map((id) => ACCOUNT_MAP[id])
     .filter(Boolean) as AccountInfo[]
 
   const handleSelect = (userId: number) => {
@@ -179,16 +97,9 @@ export default function AccountSelect() {
     navigate('/login', { replace: true })
   }
 
-  const handleToggleSort = () => {
-    setSortMode((v) => !v)
-  }
-
-  // dnd-kit sensors: 支持鼠标和触屏，触屏需按住 200ms 才触发（避免与滑动冲突）
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 6 },
-    }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
   )
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -235,46 +146,28 @@ export default function AccountSelect() {
                 const pnlPositive = account.totalPnl >= 0
                 return (
                   <Swiper.Item key={account.userId}>
-                    <div
-                      className="account-card"
-                      onClick={() => handleSelect(account.userId)}
-                    >
+                    <div className="account-card" onClick={() => handleSelect(account.userId)}>
                       <div className="account-card-top">
-                        <div
-                          className="broker-logo"
-                          style={{ background: account.logoColor }}
-                        >
+                        <div className="broker-logo" style={{ background: account.logoColor }}>
                           {account.logoText}
                         </div>
-                        <div className="account-card-enter">
-                          <RightOutline />
-                        </div>
+                        <div className="account-card-enter"><RightOutline /></div>
                       </div>
-
                       <div className="account-broker-name">{account.brokerName}</div>
-                      <div className="account-masked">
-                        交易账户：{account.maskedAccount}
-                      </div>
-
+                      <div className="account-masked">交易账户：{account.maskedAccount}</div>
                       <div className="account-metrics">
                         <div className="account-metric">
-                          <span
-                            className={`account-metric-val ${pnlPositive ? 'positive' : 'negative'}`}
-                          >
+                          <span className={`account-metric-val ${pnlPositive ? 'positive' : 'negative'}`}>
                             {formatPnl(account.totalPnl)}
                           </span>
                           <span className="account-metric-label">本期盈亏</span>
                         </div>
                         <div className="account-metric">
-                          <span className="account-metric-val neutral">
-                            {account.winRate}%
-                          </span>
+                          <span className="account-metric-val neutral">{account.winRate}%</span>
                           <span className="account-metric-label">胜率</span>
                         </div>
                         <div className="account-metric">
-                          <span className="account-metric-val neutral">
-                            {account.tradePairs}笔
-                          </span>
+                          <span className="account-metric-val neutral">{account.tradePairs}笔</span>
                           <span className="account-metric-label">交易笔数</span>
                         </div>
                       </div>
@@ -288,10 +181,7 @@ export default function AccountSelect() {
           {/* 自定义小点指示器 */}
           <div className="account-dots">
             {sortedAccounts.map((_, i) => (
-              <div
-                key={i}
-                className={`account-dot${i === activeIndex ? ' active' : ''}`}
-              />
+              <div key={i} className={`account-dot${i === activeIndex ? ' active' : ''}`} />
             ))}
           </div>
         </>
@@ -301,15 +191,8 @@ export default function AccountSelect() {
       {sortMode && (
         <div className="sort-panel">
           <p className="sort-panel-hint">拖动右侧 ☰ 调整账户顺序</p>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={order}
-              strategy={verticalListSortingStrategy}
-            >
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={order} strategy={verticalListSortingStrategy}>
               {sortedAccounts.map((account) => (
                 <SortableItem key={account.userId} account={account} />
               ))}
@@ -320,18 +203,13 @@ export default function AccountSelect() {
 
       {/* ── 底部操作区 ── */}
       <div className="sort-toggle-row">
-        <button className="sort-toggle-btn" onClick={handleToggleSort}>
+        <button className="sort-toggle-btn" onClick={() => setSortMode((v) => !v)}>
           {sortMode ? '✓ 完成排序' : '⇅ 调整顺序'}
         </button>
       </div>
 
       <div className="account-bottom">
-        <Button
-          block
-          fill="outline"
-          size="large"
-          onClick={() => navigate('/history')}
-        >
+        <Button block fill="outline" size="large" onClick={() => navigate('/history')}>
           查看历史报告
         </Button>
       </div>

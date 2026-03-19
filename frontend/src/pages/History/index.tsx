@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { NavBar, SpinLoading, Toast } from 'antd-mobile'
 import dayjs from 'dayjs'
 import { getReports } from '../../services/api'
+import { ACCOUNT_MAP } from '../../constants/accounts'
 import type { ReportListItem } from '../../types'
 import './index.css'
 
@@ -43,6 +44,7 @@ export default function History() {
               const status = statusMap[r.status] ?? statusMap.pending
               const hasPnl = r.total_pnl != null
               const pnlPositive = (r.total_pnl ?? 0) >= 0
+              const account = ACCOUNT_MAP[r.user_id]
 
               return (
                 <div
@@ -50,9 +52,18 @@ export default function History() {
                   className="report-card"
                   onClick={() => navigate(`/report/${r.id}`)}
                 >
-                  {/* Top row: user + status */}
+                  {/* Top row: broker info + status */}
                   <div className="rc-top">
-                    <span className="rc-user">{r.user_name}</span>
+                    <div className="rc-account">
+                      {account ? (
+                        <>
+                          <span className="rc-broker">{account.brokerName}</span>
+                          <span className="rc-masked">{account.maskedAccount}</span>
+                        </>
+                      ) : (
+                        <span className="rc-broker">未知账户</span>
+                      )}
+                    </div>
                     <span className="rc-status" style={{ color: status.color }}>
                       {status.text}
                     </span>
