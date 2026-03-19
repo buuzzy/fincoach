@@ -6,36 +6,33 @@ import {
   type ReactNode,
 } from 'react'
 
-const TOKEN_KEY = 'tm_access_token'
+const SESSION_KEY = 'tm_logged_in'
 
 interface AuthContextValue {
-  token: string | null
   isAuthenticated: boolean
-  saveToken: (token: string) => void
+  setLoggedIn: () => void
   logout: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() =>
-    localStorage.getItem(TOKEN_KEY),
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(
+    () => sessionStorage.getItem(SESSION_KEY) === '1',
   )
 
-  const saveToken = useCallback((t: string) => {
-    localStorage.setItem(TOKEN_KEY, t)
-    setToken(t)
+  const setLoggedIn = useCallback(() => {
+    sessionStorage.setItem(SESSION_KEY, '1')
+    setIsAuthenticated(true)
   }, [])
 
   const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY)
-    setToken(null)
+    sessionStorage.removeItem(SESSION_KEY)
+    setIsAuthenticated(false)
   }, [])
 
   return (
-    <AuthContext.Provider
-      value={{ token, isAuthenticated: !!token, saveToken, logout }}
-    >
+    <AuthContext.Provider value={{ isAuthenticated, setLoggedIn, logout }}>
       {children}
     </AuthContext.Provider>
   )

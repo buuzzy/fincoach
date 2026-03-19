@@ -12,7 +12,6 @@ from sqlalchemy import select, cast, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import get_db, get_async_session
-from app.core.auth import get_current_user
 from app.models import (
     ReportORM,
     UserORM,
@@ -138,7 +137,6 @@ async def generate_report(
     req: ReportRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(get_current_user),
 ):
     """Create report record immediately and run analysis pipeline in background."""
 
@@ -168,7 +166,6 @@ async def generate_report(
 async def get_report(
     report_id: int,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(get_current_user),
 ):
     """Fetch a single report by ID."""
     report = await db.get(ReportORM, report_id)
@@ -182,7 +179,6 @@ async def get_report(
 @router.get("/", response_model=list[ReportListItem])
 async def list_reports(
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(get_current_user),
 ):
     """List all reports."""
     stmt = (

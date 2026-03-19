@@ -7,7 +7,7 @@ import './index.css'
 
 export default function Login() {
   const navigate = useNavigate()
-  const { saveToken } = useAuth()
+  const { setLoggedIn } = useAuth()
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -26,8 +26,8 @@ export default function Login() {
     }
     setLoading(true)
     try {
-      const { access_token } = await login({ username, password })
-      saveToken(access_token)
+      await login({ username, password })
+      setLoggedIn()
       navigate('/', { replace: true })
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '登录失败，请重试'

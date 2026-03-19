@@ -7,7 +7,6 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import get_db
-from app.core.auth import get_current_user
 from app.models import (
     UserORM,
     TradeORM,
@@ -25,7 +24,6 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 @router.get("/", response_model=list[UserListItem])
 async def list_users(
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(get_current_user),
 ):
     """List all users with trade counts."""
     stmt = (
@@ -55,7 +53,6 @@ async def list_users(
 async def get_user_profile(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(get_current_user),
 ):
     """Generate and return user profile analysis."""
     user = await db.get(UserORM, user_id)
