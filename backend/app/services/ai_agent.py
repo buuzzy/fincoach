@@ -227,6 +227,7 @@ def _truncate_data(data: Any, max_rows: int = KLINE_WINDOW) -> Any:
 def _build_system_prompt() -> str:
     return (
         "你是A股交易教练，可以调用工具获取实时行情数据辅助分析。\n\n"
+        "重要：所有输出文本中，请用「该账户」指代交易者，禁止出现任何人名。\n\n"
         "输出严格 JSON：\n"
         '{\n'
         '  "summary": "本期交易总结（200字内，客观陈述数据与表现）",\n'
@@ -237,7 +238,7 @@ def _build_system_prompt() -> str:
         '  }\n'
         '}\n'
         'pattern_examples 仅包含本次报告检测到的 pattern。\n'
-        "style_description 示例：'平均持仓3天，周均操作5次，多数盈利交易在3天内完成，亏损交易持仓明显偏长。'"
+        "style_description 示例：'该账户平均持仓3天，周均操作5次，多数盈利交易在3天内完成，亏损交易持仓明显偏长。'"
     )
 
 
@@ -270,7 +271,7 @@ def _build_user_message(
 
     codes_str = "、".join(stock_codes) if stock_codes else "（无具体股票代码）"
 
-    return f"""请分析以下用户交易数据，生成个性化复盘报告。
+    return f"""请分析以下交易账户数据，生成个性化复盘报告。所有文本中请用「该账户」指代交易者，禁止出现任何人名。
 
 ## 分析期间
 {period_start} 至 {period_end}
@@ -278,8 +279,7 @@ def _build_user_message(
 ## 涉及股票代码
 {codes_str}
 
-## 用户画像
-- 用户：{profile.user_name}
+## 账户画像
 - 交易笔数：{profile.trade_count}
 - 胜率：{profile.win_rate:.1%}
 - 平均持仓天数：{profile.avg_holding_days:.1f}天
@@ -404,7 +404,7 @@ def _fallback_report(
     """Template-based fallback when LLM is unavailable."""
 
     summary = (
-        f"用户 {profile.user_name} 在分析期间共完成{profile.trade_count}笔交易，"
+        f"该账户在分析期间共完成{profile.trade_count}笔交易，"
         f"胜率{profile.win_rate:.1%}，总盈亏{profile.total_pnl:,.2f}元。"
         f"平均持仓{profile.avg_holding_days:.1f}天，每周交易{profile.trade_frequency_per_week:.1f}次。"
         f"诊断严重程度评分：{diagnosis.severity_score}/100。"

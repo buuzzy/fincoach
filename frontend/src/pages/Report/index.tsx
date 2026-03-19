@@ -144,7 +144,7 @@ export default function Report() {
             {/* 3. 交易概览（含用户名，去掉 UserProfileCard） */}
             {report.profile && (
               <section className="report-section">
-                <Card title={`交易概览 · ${report.profile.user_name}`}>
+                <Card title="交易概览">
                   <div className="stats-grid">
                     <div className="stat-item">
                       <span className="stat-value">{report.profile.trade_count}</span>
