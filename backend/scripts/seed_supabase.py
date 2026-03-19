@@ -78,12 +78,19 @@ STOCK_MAP = {code: name for code, name in STOCKS}
 INDEX_CODE = "000001.SH"
 INDEX_NAME = "上证指数"
 
-# 个股新闻不足时的板块补充关键词（精准对应，避免误匹配）
-STOCK_SECTOR_KEYWORDS: dict[str, str] = {
-    "002415.SZ": "安防",          # 海康威视 → 安防板块
-    "600893.SH": "航空航天",      # 航发动力 → 航空航天军工
-    "300285.SZ": "新材料",        # 国瓷材料 → 新材料板块
-    "688390.SH": "光伏",          # 固德威 → 光伏板块
+# 每只股票的搜索关键词配置：(category, keyword) 组合
+# 多轮搜索 → 去重合并 → 期间过滤
+STOCK_SEARCH_CONFIG: dict[str, list[tuple[str, str]]] = {
+    "600519.SH": [("company", "贵州茅台"), ("stock", "贵州茅台"), ("industry", "白酒")],
+    "002594.SZ": [("company", "比亚迪"),   ("stock", "比亚迪"),   ("industry", "新能源汽车")],
+    "300750.SZ": [("company", "宁德时代"), ("stock", "宁德时代"), ("industry", "锂电池")],
+    "688008.SH": [("company", "澜起科技"), ("stock", "澜起科技"), ("industry", "半导体")],
+    "600893.SH": [("company", "航发动力"), ("stock", "航发动力"), ("industry", "航空航天"), ("industry", "军工")],
+    "688390.SH": [("company", "固德威"),   ("stock", "固德威"),   ("industry", "光伏")],
+    "601888.SH": [("company", "中国中免"), ("stock", "中国中免"), ("industry", "免税")],
+    "600900.SH": [("company", "长江电力"), ("stock", "长江电力"), ("industry", "水电")],
+    "002415.SZ": [("company", "海康威视"), ("stock", "海康威视"), ("industry", "安防")],
+    "300285.SZ": [("company", "国瓷材料"), ("stock", "国瓷材料"), ("industry", "新材料")],
 }
 
 PERIOD_START = date(2026, 1, 14)
@@ -211,23 +218,32 @@ async def fetch_kline(code: str, qveris_available: bool) -> list[dict[str, Any]]
 FINLOOP_NEWS_BASE = "https://ai-uat.finloopfintech.com"
 
 async def fetch_news_finloop(stock_name: str, stock_code: str) -> list[dict[str, Any]]:
-    """Fetch stock news from finloop-news (primary).
+    """Fetch stock news via multi-category multi-keyword strategy.
 
-    If individual stock returns fewer than 5 in-period articles,
-    supplement with sector-level news using the per-stock keyword map.
+    Uses STOCK_SEARCH_CONFIG for each stock — multiple (category, keyword)
+    queries are merged, deduplicated by title, and filtered to PERIOD_START~END.
     """
     import httpx
 
-    async def _query(keyword: str, client: httpx.AsyncClient) -> list[dict[str, Any]]:
+    search_configs = STOCK_SEARCH_CONFIG.get(stock_code, [
+        ("company", stock_name), ("stock", stock_name),
+    ])
+
+    async def _query(category: str, keyword: str, client: httpx.AsyncClient) -> list[dict[str, Any]]:
         url = f"{FINLOOP_NEWS_BASE}/flp-news-api/v1/news-agent/informationList"
-        payload = {"category": "stock", "keyword": keyword, "page_size": 20}
-        resp = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
-        resp.raise_for_status()
+        payload = {"category": category, "keyword": keyword, "page_size": 50}
+        try:
+            resp = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
+            resp.raise_for_status()
+        except Exception as e:
+            logger.warning("  finloop-news query [%s/%s] failed: %s", category, keyword, e)
+            return []
+
         items = resp.json().get("data", {}).get("information_list", [])
         rows = []
         for item in items:
             try:
-                pt_str = item.get("publish_time", "")
+                pt_str = item.get("publishTime") or item.get("publish_time", "")
                 if not pt_str:
                     continue
                 pt = datetime.fromisoformat(pt_str.replace("Z", "+00:00")).replace(tzinfo=None)
@@ -236,29 +252,31 @@ async def fetch_news_finloop(stock_name: str, stock_code: str) -> list[dict[str,
                 rows.append({
                     "publish_time": pt,
                     "title":        item.get("title", "").strip(),
-                    "summary":      item.get("summary", "").strip(),
+                    "summary":      (item.get("summary") or "").strip(),
                     "source":       "finloop",
                 })
             except Exception:
                 continue
         return rows
 
+    all_rows: list[dict[str, Any]] = []
+    seen_titles: set[str] = set()
+
     async with httpx.AsyncClient(timeout=30.0) as client:
-        rows = await _query(stock_name, client)
-        logger.info("  finloop-news %s(%s) 个股 → %d 条", stock_name, stock_code, len(rows))
+        for category, keyword in search_configs:
+            batch = await _query(category, keyword, client)
+            added = 0
+            for r in batch:
+                if r["title"] not in seen_titles:
+                    seen_titles.add(r["title"])
+                    all_rows.append(r)
+                    added += 1
+            logger.info("  finloop-news %s [%s/%s] → %d条(新增%d)",
+                        stock_code, category, keyword, len(batch), added)
 
-        # Supplement with sector news if fewer than 5 articles
-        sector_kw = STOCK_SECTOR_KEYWORDS.get(stock_code)
-        if sector_kw and len(rows) < 5:
-            sector_rows = await _query(sector_kw, client)
-            # Deduplicate by title
-            existing_titles = {r["title"] for r in rows}
-            added = [r for r in sector_rows if r["title"] not in existing_titles]
-            rows.extend(added)
-            logger.info("  finloop-news %s(%s) 板块「%s」补充 → +%d 条，合计 %d 条",
-                        stock_name, stock_code, sector_kw, len(added), len(rows))
-
-    return rows
+    all_rows.sort(key=lambda r: r["publish_time"])
+    logger.info("  finloop-news %s(%s) 合计 → %d 条(去重后)", stock_name, stock_code, len(all_rows))
+    return all_rows
 
 
 # ── Synthetic K-line fallback ─────────────────────────────────────────────────
@@ -642,8 +660,63 @@ async def seed_index_only() -> None:
     logger.info("✅ Index seed completed.")
 
 
+async def seed_news_only() -> None:
+    """Incremental seed: re-fetch and replace all stock_news data."""
+    logger.info("=== Incremental seed: news only ===")
+
+    news_map: dict[str, list] = {}
+    for code, name in STOCKS:
+        try:
+            articles = await fetch_news_finloop(name, code)
+        except Exception as e:
+            logger.warning("  finloop-news %s failed: %s", name, e)
+            articles = []
+        news_map[code] = articles
+
+    total = sum(len(v) for v in news_map.values())
+    logger.info("Total articles fetched: %d across %d stocks", total, len(STOCKS))
+
+    engine = create_async_engine(DB_URL, echo=False,
+                                 connect_args={"statement_cache_size": 0})
+    async with sessionmaker(engine, class_=AsyncSession)() as session:
+        await session.execute(text("DELETE FROM stock_news"))
+        await session.commit()
+        logger.info("Cleared existing stock_news")
+
+        total_inserted = 0
+        for code, name in STOCKS:
+            articles = news_map.get(code, [])
+            for a in articles:
+                await session.execute(text(
+                    "INSERT INTO stock_news (stock_code,stock_name,publish_time,title,summary,source) "
+                    "VALUES (:stock_code,:stock_name,:publish_time,:title,:summary,:source)"
+                ), {
+                    "stock_code":   code,
+                    "stock_name":   name,
+                    "publish_time": a["publish_time"],
+                    "title":        a["title"],
+                    "summary":      a.get("summary", ""),
+                    "source":       a.get("source", "finloop"),
+                })
+                total_inserted += 1
+        await session.commit()
+        logger.info("  → %d stock_news rows inserted", total_inserted)
+
+        logger.info("NEWS COVERAGE SUMMARY:")
+        for code, name in STOCKS:
+            count = len(news_map.get(code, []))
+            dates = [a["publish_time"].date() for a in news_map.get(code, [])]
+            date_range = f"{min(dates)} ~ {max(dates)}" if dates else "N/A"
+            logger.info("  %-12s %-8s → %d articles  %s", code, name, count, date_range)
+
+    await engine.dispose()
+    logger.info("✅ News seed completed.")
+
+
 if __name__ == "__main__":
     if "--index-only" in sys.argv:
         asyncio.run(seed_index_only())
+    elif "--news-only" in sys.argv:
+        asyncio.run(seed_news_only())
     else:
         asyncio.run(main())

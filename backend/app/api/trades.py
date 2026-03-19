@@ -202,16 +202,18 @@ async def get_trade_review(
         for k in idx_orms
     ]
 
-    # ── News from stock_news ───────────────────────────────────────────────────
+    # ── News from stock_news (expand window ±3 days for better coverage) ────────
+    news_start = datetime.combine(buy_date - timedelta(days=3), datetime.min.time())
+    news_end = datetime.combine(sell_date + timedelta(days=3), datetime.max.time())
     stmt_news = (
         select(StockNewsORM)
         .where(
             StockNewsORM.stock_code == code,
-            StockNewsORM.publish_time >= datetime.combine(buy_date, datetime.min.time()),
-            StockNewsORM.publish_time <= datetime.combine(sell_date, datetime.max.time()),
+            StockNewsORM.publish_time >= news_start,
+            StockNewsORM.publish_time <= news_end,
         )
         .order_by(StockNewsORM.publish_time)
-        .limit(5)
+        .limit(10)
     )
     news_res = await db.execute(stmt_news)
     news_orms = news_res.scalars().all()
