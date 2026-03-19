@@ -56,11 +56,11 @@ STOCKS: list[tuple[str, str]] = [
 ]
 
 USERS: list[tuple[str, UserProfileType]] = [
-    ("张伟", UserProfileType.AGGRESSIVE),
-    ("李静", UserProfileType.CONSERVATIVE),
-    ("王磊", UserProfileType.EMOTIONAL),
-    ("陈敏", UserProfileType.BALANCED),
-    ("赵新", UserProfileType.BALANCED),
+    ("华泰****3821", UserProfileType.AGGRESSIVE),
+    ("招商****0712", UserProfileType.CONSERVATIVE),
+    ("东财****5967", UserProfileType.EMOTIONAL),
+    ("中信****2483", UserProfileType.BALANCED),
+    ("海通****8156", UserProfileType.BALANCED),
 ]
 
 PERIOD_START = date(2025, 1, 2)
@@ -278,7 +278,14 @@ def _generate_trades(
         raw_sell = sell_row["close"] * (1 + noise)
         sell_price = round(max(sell_lo, min(sell_hi, raw_sell)), 2)
 
-        quantity = rng.choice([100, 200, 300, 500, 1000])
+        # ── Quantity: price-aware, target position 2-15万元 ──────────────────
+        # Pick a target notional value, then derive the nearest 100-share lot.
+        # For high-price stocks (e.g. 茅台 ~1700) this naturally gives 100 shares.
+        target_amounts = [20000, 30000, 50000, 80000, 100000, 150000]
+        target_value = rng.choice(target_amounts)
+        qty_raw = target_value / buy_price
+        # Round to nearest 100-lot; floor to at least 100
+        quantity = max(100, round(qty_raw / 100) * 100)
 
         # ── P&L including commission and stamp duty ───────────────────────────
         buy_cost  = buy_price  * quantity * (1 + COMMISSION_RATE)
@@ -316,7 +323,7 @@ def _generate_zhaoxin_trades(
     user_id: int,
     kline_map: dict[str, list[dict[str, Any]]],
 ) -> list[TradeORM]:
-    """Generate only 6-8 trades for 赵新 to trigger data_warning=insufficient.
+    """Generate only 6-8 trades for 海通****8156 to trigger data_warning=insufficient.
 
     Includes at least 1 slow_stop_loss trade (pnl < -8%) and 1 chase_high trade
     (buy price > avg5 * 1.05) to ensure patterns are detected.
@@ -344,7 +351,8 @@ def _generate_zhaoxin_trades(
         sell_price = sell_price_override if sell_price_override else round(
             max(sell_row["low"], min(sell_row["high"], sell_row["close"] * 0.99)), 2
         )
-        quantity = 300
+        # Price-aware quantity: target ~5万元 position, round to 100-lot
+        quantity = max(100, int(50000 / buy_price / 100) * 100)
 
         buy_cost = buy_price * quantity * (1 + COMMISSION_RATE)
         sell_recv = sell_price * quantity * (1 - COMMISSION_RATE - STAMP_DUTY_RATE)
@@ -465,7 +473,7 @@ async def _generate_mock_data_async() -> tuple[list[UserORM], list[TradeORM], li
     # Build trade ORM rows per user
     all_trades: list[TradeORM] = []
     for user in users:
-        if user.name == "赵新":
+        if user.id == 5:
             trades = _generate_zhaoxin_trades(user.id, kline_map)
         else:
             trades = _generate_trades(user.id, user.profile_type, kline_map)

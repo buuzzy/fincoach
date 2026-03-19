@@ -80,11 +80,11 @@ PERIOD_END   = date(2025, 3, 31)
 
 # ── Users ─────────────────────────────────────────────────────────────────────
 USERS = [
-    (1, "张伟",  "aggressive"),
-    (2, "李静",  "conservative"),
-    (3, "王磊",  "emotional"),
-    (4, "陈敏",  "balanced"),
-    (5, "赵新",  "balanced"),
+    (1, "华泰****3821", "aggressive"),
+    (2, "招商****0712", "conservative"),
+    (3, "东财****5967", "emotional"),
+    (4, "中信****2483", "balanced"),
+    (5, "海通****8156", "balanced"),
 ]
 
 # ── QVeris K-line fetch ───────────────────────────────────────────────────────
@@ -221,7 +221,7 @@ def generate_trades(user_id: int, profile: str, kline_map: dict, rng: random.Ran
 
 
 def generate_zhaoxin_trades(user_id: int, kline_map: dict, rng: random.Random) -> list[dict]:
-    """6-8 trades for 赵新, guaranteed slow_stop_loss + chase_high patterns."""
+    """6-8 trades for 海通****8156, guaranteed slow_stop_loss + chase_high patterns."""
     available = list(kline_map.keys())
     stocks = rng.sample(available, k=min(2, len(available)))
     trades = []
@@ -318,7 +318,7 @@ async def clear_and_seed(kline_map: dict) -> None:
         all_trades = []
         for uid, name, profile in USERS:
             rng = random.Random(uid * 9999)
-            if name == "赵新":
+            if uid == 5:
                 trades = generate_zhaoxin_trades(uid, kline_map, rng)
             else:
                 trades = generate_trades(uid, profile, kline_map, rng)
