@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { NavBar, Tag, Collapse } from 'antd-mobile'
 import * as echarts from 'echarts'
@@ -43,10 +43,257 @@ const REVIEW_STEPS: ProgressStep[] = [
   },
 ]
 
+interface AiSection {
+  title: string
+  content: string
+}
+
+function parseAiSections(raw: string): AiSection[] {
+  const cleaned = raw
+    .replace(/#{1,6}\s?/g, '')
+    .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')
+    .replace(/^[-*]\s/gm, '')
+
+  const parts = cleaned.split(/(?=【[^】]+】)/).filter(s => s.trim())
+  if (parts.length === 0) return [{ title: '情景还原', content: cleaned.trim() }]
+
+  return parts.map(part => {
+    const match = part.match(/^【([^】]+)】(.*)$/s)
+    if (match) return { title: match[1], content: match[2].trim() }
+    return { title: '', content: part.trim() }
+  }).filter(s => s.content)
+}
+
 function formatVolume(v: number): string {
   if (v >= 1e8) return (v / 1e8).toFixed(1) + '亿'
   if (v >= 1e4) return (v / 1e4).toFixed(0) + '万'
   return v.toFixed(0)
+}
+
+function FloatPnlChart({ holdingBars, buyPrice }: {
+  holdingBars: { date: string; close: number; low: number; high: number }[]
+  buyPrice: number
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const inst = useRef<echarts.ECharts | null>(null)
+
+  useEffect(() => {
+    if (!ref.current || holdingBars.length === 0) return
+
+    const dates = holdingBars.map(k => k.date.slice(5))
+    const pctData = holdingBars.map(k =>
+      +((k.close - buyPrice) / buyPrice * 100).toFixed(2)
+    )
+
+    let maxIdx = 0, minIdx = 0
+    pctData.forEach((v, i) => {
+      if (v > pctData[maxIdx]) maxIdx = i
+      if (v < pctData[minIdx]) minIdx = i
+    })
+
+    if (!inst.current) {
+      inst.current = echarts.init(ref.current, undefined, { renderer: 'svg' })
+    }
+
+    inst.current.setOption({
+      animation: true,
+      grid: { top: 24, bottom: 28, left: 48, right: 12 },
+      xAxis: {
+        type: 'category',
+        data: dates,
+        boundaryGap: false,
+        axisLabel: { fontSize: 10 },
+        axisLine: { lineStyle: { color: '#e0e0e0' } },
+        axisTick: { show: false },
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: { fontSize: 10, formatter: '{value}%' },
+        splitLine: { lineStyle: { color: '#f0f0f0' } },
+      },
+      series: [{
+        type: 'line',
+        data: pctData,
+        smooth: true,
+        symbol: 'none',
+        lineStyle: { width: 2.5, color: '#5b8ff9' },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(91,143,249,0.22)' },
+            { offset: 1, color: 'rgba(91,143,249,0)' },
+          ]),
+        },
+        markPoint: {
+          symbol: 'circle',
+          symbolSize: 8,
+          label: { fontSize: 10, formatter: (p: { value: number }) => (p.value >= 0 ? '+' : '') + p.value + '%' },
+          data: [
+            {
+              coord: [dates[maxIdx], pctData[maxIdx]],
+              value: pctData[maxIdx],
+              itemStyle: { color: '#26a69a' },
+              label: { position: 'top' },
+            },
+            {
+              coord: [dates[minIdx], pctData[minIdx]],
+              value: pctData[minIdx],
+              itemStyle: { color: '#ef5350' },
+              label: { position: 'bottom' },
+            },
+          ],
+        },
+        markLine: {
+          silent: true,
+          symbol: 'none',
+          lineStyle: { type: 'dashed', color: '#ccc' },
+          data: [{ yAxis: 0 }],
+          label: { show: false },
+        },
+      }],
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params: echarts.DefaultLabelFormatterCallbackParams[]) => {
+          const p = params[0]
+          const v = p.value as number
+          const color = v >= 0 ? '#ef5350' : '#26a69a'
+          return `<b>${p.name}</b><br/>浮盈浮亏: <span style="color:${color}">${v >= 0 ? '+' : ''}${v}%</span>`
+        },
+      },
+    }, true)
+
+    setTimeout(() => inst.current?.resize(), 80)
+    return () => { inst.current?.dispose(); inst.current = null }
+  }, [holdingBars, buyPrice])
+
+  return <div ref={ref} className="tr-inline-chart" />
+}
+
+function VsIndexChart({ holdingBars, indexKline, sectorKline, sectorName, buyDate, sellDate }: {
+  holdingBars: { date: string; close: number }[]
+  indexKline: { date: string; close: number }[]
+  sectorKline: { date: string; close: number }[]
+  sectorName: string
+  buyDate: string
+  sellDate: string
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const inst = useRef<echarts.ECharts | null>(null)
+
+  useEffect(() => {
+    if (!ref.current || holdingBars.length === 0) return
+
+    const idxHolding = indexKline.filter(k => k.date >= buyDate && k.date <= sellDate)
+    if (idxHolding.length === 0) return
+
+    const baseStock = holdingBars[0].close
+    const baseIdx = idxHolding[0].close
+
+    const dates = holdingBars.map(k => k.date.slice(5))
+    const stockPct = holdingBars.map(k =>
+      +((k.close - baseStock) / baseStock * 100).toFixed(2)
+    )
+    const idxPct = idxHolding.map(k =>
+      +((k.close - baseIdx) / baseIdx * 100).toFixed(2)
+    )
+
+    const legendData: { name: string; icon: string }[] = [
+      { name: '个股', icon: 'roundRect' },
+      { name: '上证指数', icon: 'roundRect' },
+    ]
+
+    const series: echarts.SeriesOption[] = [
+      {
+        name: '个股',
+        type: 'line',
+        data: stockPct,
+        smooth: true,
+        symbol: 'none',
+        lineStyle: { width: 2.5, color: '#5b8ff9' },
+        itemStyle: { color: '#5b8ff9' },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(91,143,249,0.15)' },
+            { offset: 1, color: 'rgba(91,143,249,0)' },
+          ]),
+        },
+      },
+      {
+        name: '上证指数',
+        type: 'line',
+        data: idxPct,
+        smooth: true,
+        symbol: 'none',
+        lineStyle: { width: 1.5, color: '#aaa', type: 'dashed' },
+        itemStyle: { color: '#aaa' },
+      },
+    ]
+
+    const sectHolding = sectorKline.filter(k => k.date >= buyDate && k.date <= sellDate)
+    if (sectHolding.length > 0) {
+      const baseSect = sectHolding[0].close
+      const sectPct = sectHolding.map(k =>
+        +((k.close - baseSect) / baseSect * 100).toFixed(2)
+      )
+      const label = sectorName || '板块'
+      legendData.push({ name: label, icon: 'roundRect' })
+      series.push({
+        name: label,
+        type: 'line',
+        data: sectPct,
+        smooth: true,
+        symbol: 'none',
+        lineStyle: { width: 2, color: '#ff9845' },
+        itemStyle: { color: '#ff9845' },
+      })
+    }
+
+    if (!inst.current) {
+      inst.current = echarts.init(ref.current, undefined, { renderer: 'svg' })
+    }
+
+    inst.current.setOption({
+      animation: true,
+      grid: { top: 32, bottom: 28, left: 48, right: 12 },
+      legend: {
+        top: 4,
+        textStyle: { fontSize: 11 },
+        itemWidth: 14,
+        itemHeight: 8,
+        data: legendData,
+      },
+      xAxis: {
+        type: 'category',
+        data: dates,
+        boundaryGap: false,
+        axisLabel: { fontSize: 10 },
+        axisLine: { lineStyle: { color: '#e0e0e0' } },
+        axisTick: { show: false },
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: { fontSize: 10, formatter: '{value}%' },
+        splitLine: { lineStyle: { color: '#f0f0f0' } },
+      },
+      series,
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params: echarts.DefaultLabelFormatterCallbackParams[]) => {
+          let s = `<b>${params[0].name}</b>`
+          params.forEach(p => {
+            const v = p.value as number
+            const color = v >= 0 ? '#ef5350' : '#26a69a'
+            s += `<br/>${p.seriesName}: <span style="color:${color}">${v >= 0 ? '+' : ''}${v}%</span>`
+          })
+          return s
+        },
+      },
+    }, true)
+
+    setTimeout(() => inst.current?.resize(), 80)
+    return () => { inst.current?.dispose(); inst.current = null }
+  }, [holdingBars, indexKline, sectorKline, sectorName, buyDate, sellDate])
+
+  return <div ref={ref} className="tr-inline-chart" />
 }
 
 export default function TradeReview() {
@@ -79,14 +326,31 @@ export default function TradeReview() {
       .finally(() => setLoading(false))
   }, [buyTradeId, sellTradeId])
 
+  const buyDate  = review ? dayjs(review.buy_time).format('YYYY-MM-DD') : ''
+  const sellDate = review ? dayjs(review.sell_time).format('YYYY-MM-DD') : ''
+
+  const holdingBars = useMemo(() =>
+    review?.kline.filter(k => k.date >= buyDate && k.date <= sellDate) ?? [],
+    [review, buyDate, sellDate],
+  )
+
+  const aiSections = useMemo(() =>
+    review?.ai_review ? parseAiSections(review.ai_review) : [],
+    [review],
+  )
+
+  const getSection = (title: string) =>
+    aiSections.find(s => s.title.includes(title))
+
   const renderChart = useCallback(() => {
     if (!review || review.kline.length === 0 || !chartRef.current) return
 
-    const buyDate  = dayjs(review.buy_time).format('YYYY-MM-DD')
-    const sellDate = dayjs(review.sell_time).format('YYYY-MM-DD')
-
-    const dates      = review.kline.map((k) => k.date)
-    const candleData = review.kline.map((k) => [k.open, k.close, k.low, k.high])
+    const dates      = review.kline.map(k => k.date)
+    const candleData = review.kline.map(k => [k.open, k.close, k.low, k.high])
+    const volData    = review.kline.map(k => ({
+      value: k.volume,
+      itemStyle: { color: k.close >= k.open ? 'rgba(239,83,80,0.4)' : 'rgba(38,166,154,0.4)' },
+    }))
 
     const markPointData: echarts.MarkPointComponentOption['data'] = []
 
@@ -123,25 +387,52 @@ export default function TradeReview() {
       })
     }
 
-    const option: echarts.EChartsOption = {
-      animation: false,
-      grid: { top: 10, bottom: 30, left: 52, right: 10 },
-      xAxis: {
-        type: 'category',
-        data: dates,
-        axisLabel: { fontSize: 10, formatter: (val: string) => val.slice(5) },
-        axisLine: { lineStyle: { color: '#e0e0e0' } },
-        axisTick: { show: false },
-      },
-      yAxis: {
-        scale: true,
-        axisLabel: { fontSize: 10 },
-        splitLine: { lineStyle: { color: '#f0f0f0' } },
-      },
+    chartInstance.current.setOption({
+      animation: true,
+      grid: [
+        { top: 10, bottom: '28%', left: 52, right: 10 },
+        { top: '78%', bottom: 30, left: 52, right: 10 },
+      ],
+      axisPointer: { link: [{ xAxisIndex: 'all' }] },
+      xAxis: [
+        {
+          type: 'category',
+          data: dates,
+          gridIndex: 0,
+          axisLabel: { show: false },
+          axisLine: { show: false },
+          axisTick: { show: false },
+        },
+        {
+          type: 'category',
+          data: dates,
+          gridIndex: 1,
+          axisLabel: { fontSize: 10, formatter: (val: string) => val.slice(5) },
+          axisLine: { lineStyle: { color: '#e0e0e0' } },
+          axisTick: { show: false },
+        },
+      ],
+      yAxis: [
+        {
+          scale: true,
+          gridIndex: 0,
+          axisLabel: { fontSize: 10 },
+          splitLine: { lineStyle: { color: '#f0f0f0' } },
+        },
+        {
+          gridIndex: 1,
+          axisLabel: { show: false },
+          splitLine: { show: false },
+          axisTick: { show: false },
+          axisLine: { show: false },
+        },
+      ],
       series: [
         {
           type: 'candlestick',
           data: candleData,
+          xAxisIndex: 0,
+          yAxisIndex: 0,
           itemStyle: {
             color: '#ef5350',
             color0: '#26a69a',
@@ -150,37 +441,45 @@ export default function TradeReview() {
           },
           markPoint: { data: markPointData },
         },
+        {
+          type: 'bar',
+          data: volData,
+          xAxisIndex: 1,
+          yAxisIndex: 1,
+          barWidth: '60%',
+        },
       ],
       tooltip: {
         trigger: 'axis',
         axisPointer: { type: 'cross' },
+        formatter: (params: unknown) => {
+          if (!Array.isArray(params) || params.length === 0) return ''
+          const idx = (params[0] as { dataIndex: number }).dataIndex
+          const k = review.kline[idx]
+          const chgColor = k.change_pct >= 0 ? '#ef5350' : '#26a69a'
+          return [
+            `<b>${k.date.slice(5)}</b>`,
+            `开: ${k.open.toFixed(2)}  收: ${k.close.toFixed(2)}`,
+            `高: ${k.high.toFixed(2)}  低: ${k.low.toFixed(2)}`,
+            `量: ${formatVolume(k.volume)}`,
+            `<span style="color:${chgColor}">${k.change_pct >= 0 ? '+' : ''}${k.change_pct.toFixed(2)}%</span>`,
+          ].join('<br/>')
+        },
       },
-    }
+    }, true)
 
-    chartInstance.current.setOption(option, true)
     setTimeout(() => chartInstance.current?.resize(), 80)
-  }, [review])
+  }, [review, buyDate, sellDate])
+
+  useEffect(() => { renderChart() }, [renderChart])
 
   useEffect(() => {
-    renderChart()
-  }, [renderChart])
-
-  useEffect(() => {
-    return () => {
-      chartInstance.current?.dispose()
-      chartInstance.current = null
-    }
+    return () => { chartInstance.current?.dispose(); chartInstance.current = null }
   }, [])
 
   const isProfit = (review?.pnl ?? 0) >= 0
   const pnlColor = isProfit ? 'var(--profit-color)' : 'var(--loss-color)'
   const pnlSign  = isProfit ? '+' : ''
-
-  const holdingBars = review?.kline.filter((k) => {
-    const buyDate  = dayjs(review.buy_time).format('YYYY-MM-DD')
-    const sellDate = dayjs(review.sell_time).format('YYYY-MM-DD')
-    return k.date >= buyDate && k.date <= sellDate
-  }) ?? []
 
   return (
     <div className="trade-review-page">
@@ -237,13 +536,87 @@ export default function TradeReview() {
             </div>
           </div>
 
-          {/* ── K 线蜡烛图（默认展示） ── */}
+          {/* ── K 线蜡烛图 ── */}
           {review.kline.length > 0 && (
             <div className="tr-card">
               <h3 className="tr-section-title">持仓期间走势</h3>
               <div ref={chartRef} className="tr-kline-chart" />
             </div>
           )}
+
+          {/* ── AI 情景还原（图文交替） ── */}
+          <div className="tr-card">
+            <h3 className="tr-section-title">情景还原</h3>
+            {review.status === 'failed' || !review.ai_review ? (
+              <p className="tr-empty-text">AI 分析暂时不可用</p>
+            ) : (
+              <div className="tr-ai-review">
+                {/* 买入时点 */}
+                {getSection('买入') && (
+                  <div className="tr-ai-section">
+                    <h4 className="tr-ai-heading">{getSection('买入')!.title}</h4>
+                    <p className="tr-ai-text">{getSection('买入')!.content}</p>
+                  </div>
+                )}
+
+                {/* 持仓历程 */}
+                {getSection('持仓') && (
+                  <div className="tr-ai-section">
+                    <h4 className="tr-ai-heading">{getSection('持仓')!.title}</h4>
+                    <p className="tr-ai-text">{getSection('持仓')!.content}</p>
+                  </div>
+                )}
+
+                {/* 浮盈浮亏曲线 */}
+                {holdingBars.length > 1 && (
+                  <div className="tr-ai-chart-block">
+                    <span className="tr-ai-chart-label">持仓浮盈浮亏</span>
+                    <FloatPnlChart holdingBars={holdingBars} buyPrice={review.buy_price} />
+                  </div>
+                )}
+
+                {/* 卖出时点 */}
+                {getSection('卖出') && (
+                  <div className="tr-ai-section">
+                    <h4 className="tr-ai-heading">{getSection('卖出')!.title}</h4>
+                    <p className="tr-ai-text">{getSection('卖出')!.content}</p>
+                  </div>
+                )}
+
+                {/* 个股 vs 大盘 vs 板块对比 */}
+                {holdingBars.length > 1 && review.index_kline.length > 0 && (
+                  <div className="tr-ai-chart-block">
+                    <span className="tr-ai-chart-label">
+                      个股 vs 大盘{review.sector_name ? ` vs ${review.sector_name}` : ''}
+                    </span>
+                    <VsIndexChart
+                      holdingBars={holdingBars}
+                      indexKline={review.index_kline}
+                      sectorKline={review.sector_kline ?? []}
+                      sectorName={review.sector_name ?? '板块'}
+                      buyDate={buyDate}
+                      sellDate={sellDate}
+                    />
+                  </div>
+                )}
+
+                {/* 交易复盘 */}
+                {getSection('复盘') && (
+                  <div className="tr-ai-section">
+                    <h4 className="tr-ai-heading">{getSection('复盘')!.title}</h4>
+                    <p className="tr-ai-text">{getSection('复盘')!.content}</p>
+                  </div>
+                )}
+
+                {/* 容错：无法按【】拆分时直接渲染全部文字 */}
+                {aiSections.length === 1 && !aiSections[0].title.includes('买入') && (
+                  <div className="tr-ai-section">
+                    <p className="tr-ai-text">{aiSections[0].content}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* ── 逐日行情明细 + 资讯（可收起） ── */}
           <Collapse defaultActiveKey={[]}>
@@ -307,26 +680,6 @@ export default function TradeReview() {
               )}
             </Collapse.Panel>
           </Collapse>
-
-          {/* ── AI 情景还原 ── */}
-          <div className="tr-card">
-            <h3 className="tr-section-title">情景还原</h3>
-            {review.status === 'failed' || !review.ai_review ? (
-              <p className="tr-empty-text">AI 分析暂时不可用</p>
-            ) : (
-              <div className="tr-ai-review">
-                {review.ai_review
-                  .replace(/#{1,6}\s?/g, '')
-                  .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')
-                  .replace(/^[-*]\s/gm, '')
-                  .split(/\n{2,}/)
-                  .filter(p => p.trim())
-                  .map((paragraph, idx) => (
-                    <p key={idx} className="tr-ai-paragraph">{paragraph.trim()}</p>
-                  ))}
-              </div>
-            )}
-          </div>
         </div>
       )}
     </div>

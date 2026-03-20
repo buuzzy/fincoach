@@ -8,6 +8,7 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, cast, Date
@@ -19,6 +20,9 @@ from app.utils.trade_utils import pair_trades
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/trades", tags=["trades"])
+
+FLP_BASE = "https://papi-uat.finloopg.com/flp-mktdata-hub"
+_INDUSTRY_CACHE: dict[str, tuple[str, str]] = {}  # stock_code → (industry_code, industry_name)
 
 
 # ── Pydantic schemas ───────────────────────────────────────────────────────────
@@ -60,6 +64,8 @@ class TradeReviewResponse(BaseModel):
     hold_days: int
     kline: list[dict] = []
     index_kline: list[dict] = []
+    sector_kline: list[dict] = []
+    sector_name: str = ""
     news: list[dict] = []
     status: str = TradeReviewStatus.GENERATING
     ai_review: Optional[str] = None
@@ -70,6 +76,90 @@ class TradeReviewResponse(BaseModel):
 
 def _hold_days(buy_time: datetime, sell_time: datetime) -> int:
     return max(1, (sell_time.date() - buy_time.date()).days)
+
+
+async def _get_industry_info(stock_code: str) -> tuple[str, str] | None:
+    """Return (industry_code, industry_name) via flp-mktdata, with in-memory cache."""
+    if stock_code in _INDUSTRY_CACHE:
+        return _INDUSTRY_CACHE[stock_code]
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{FLP_BASE}/v1/stock/company/info",
+                json={"ticker": stock_code},
+            )
+            data = resp.json()
+            code = data.get("industryCode")
+            name = data.get("industryName")
+            if code and name:
+                _INDUSTRY_CACHE[stock_code] = (code, name)
+                return (code, name)
+    except Exception as e:
+        logger.warning("[SectorInfo] Failed to get industry for %s: %s", stock_code, e)
+    return None
+
+
+async def _fetch_sector_kline(
+    db: AsyncSession,
+    industry_code: str,
+    industry_name: str,
+    start_date: date,
+    end_date: date,
+) -> list[dict]:
+    """Return sector index K-line: read from market_data cache, fetch from API if missing."""
+    stmt = (
+        select(MarketDataORM)
+        .where(
+            MarketDataORM.stock_code == industry_code,
+            MarketDataORM.trade_date >= start_date,
+            MarketDataORM.trade_date <= end_date,
+        )
+        .order_by(MarketDataORM.trade_date)
+    )
+    result = await db.execute(stmt)
+    rows = result.scalars().all()
+    if rows:
+        return [
+            {"date": str(r.trade_date), "close": r.close_price, "change_pct": r.change_pct}
+            for r in rows
+        ]
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{FLP_BASE}/v1/stock/history",
+                json={
+                    "code": industry_code,
+                    "startDate": str(start_date),
+                    "endDate": str(end_date),
+                },
+            )
+            bars = resp.json().get("data", [])
+            if not bars:
+                return []
+
+            for bar in bars:
+                db.add(MarketDataORM(
+                    stock_code=industry_code,
+                    stock_name=industry_name,
+                    trade_date=date.fromisoformat(bar["time"]),
+                    open_price=bar["open"],
+                    high_price=bar["high"],
+                    low_price=bar["low"],
+                    close_price=bar["close"],
+                    volume=bar.get("vol", 0),
+                    change_pct=bar.get("chgPct", 0),
+                ))
+            await db.commit()
+            logger.info("[SectorKline] Cached %d bars for %s (%s)", len(bars), industry_code, industry_name)
+
+            return [
+                {"date": bar["time"], "close": bar["close"], "change_pct": bar.get("chgPct", 0)}
+                for bar in bars
+            ]
+    except Exception as e:
+        logger.warning("[SectorKline] Failed for %s: %s", industry_code, e)
+        return []
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -202,6 +292,14 @@ async def get_trade_review(
         for k in idx_orms
     ]
 
+    # ── 行业板块 K-line ────────────────────────────────────────────────────────
+    sector_kline: list[dict] = []
+    sector_name = ""
+    industry = await _get_industry_info(code)
+    if industry:
+        sector_code, sector_name = industry
+        sector_kline = await _fetch_sector_kline(db, sector_code, sector_name, chart_start, chart_end)
+
     # ── News from stock_news (expand window ±3 days for better coverage) ────────
     news_start = datetime.combine(buy_date - timedelta(days=3), datetime.min.time())
     news_end = datetime.combine(sell_date + timedelta(days=3), datetime.max.time())
@@ -245,6 +343,8 @@ async def get_trade_review(
         kline=kline,
         news=news,
         index_kline=index_kline,
+        sector_kline=sector_kline,
+        sector_name=sector_name,
     )
 
     return TradeReviewResponse(
@@ -262,6 +362,8 @@ async def get_trade_review(
         hold_days     = hold_days,
         kline         = kline,
         index_kline   = index_kline,
+        sector_kline  = sector_kline,
+        sector_name   = sector_name,
         news          = news,
         status        = TradeReviewStatus.COMPLETED if ai_review else TradeReviewStatus.FAILED,
         ai_review     = ai_review,
@@ -299,6 +401,8 @@ def _build_review_context(
     kline: list[dict],
     news: list[dict],
     index_kline: list[dict],
+    sector_kline: list[dict] | None = None,
+    sector_name: str = "",
 ) -> dict:
     """Pre-compute rich analytical context from raw data."""
     buy_date_str  = buy_time.strftime("%Y-%m-%d")
@@ -346,6 +450,17 @@ def _build_review_context(
             relative = "明显跑输大盘"
         else:
             relative = "与大盘基本同步"
+
+    # ── Sector context ──
+    sector_summary = ""
+    sector_chg = 0.0
+    if sector_kline and sector_name:
+        sect_holding = [k for k in sector_kline if buy_date_str <= k["date"] <= sell_date_str]
+        if sect_holding:
+            sect_start = sect_holding[0]["close"]
+            sect_end = sect_holding[-1]["close"]
+            sector_chg = (sect_end - sect_start) / sect_start * 100 if sect_start else 0
+            sector_summary = f"{sector_name}板块同期涨跌 {sector_chg:+.2f}%"
 
     # ── Timing quality analysis ──
     buy_vs_low = ((buy_price - period_low) / period_low * 100) if period_low else 0
@@ -440,6 +555,9 @@ def _build_review_context(
         "idx_summary": idx_summary,
         "idx_chg": idx_chg,
         "relative": relative,
+        "sector_summary": sector_summary,
+        "sector_chg": sector_chg,
+        "sector_name": sector_name,
         "news_lines": news_lines,
         "holding_bars": holding_bars,
         "buy_timing": buy_timing,
@@ -470,15 +588,19 @@ async def _generate_trade_review(
     kline: list[dict],
     news: list[dict],
     index_kline: list[dict] | None = None,
+    sector_kline: list[dict] | None = None,
+    sector_name: str = "",
 ) -> Optional[str]:
     """Call LLM to generate a factual single-trade review. Returns None on failure."""
     if index_kline is None:
         index_kline = []
+    if sector_kline is None:
+        sector_kline = []
 
     ctx = _build_review_context(
         stock_code, stock_name, buy_time, sell_time,
         buy_price, sell_price, quantity, pnl, pnl_pct, hold_days,
-        kline, news, index_kline,
+        kline, news, index_kline, sector_kline, sector_name,
     )
 
     from app.core.config import get_settings
@@ -493,26 +615,22 @@ async def _generate_trade_review(
         client = AsyncOpenAI(base_url=settings.LLM_BASE_URL, api_key=settings.LLM_API_KEY)
 
         system_prompt = (
-            "你是专业的A股交易复盘分析师，擅长将行情数据、市场资讯和交易行为串联起来，"
-            "还原交易发生时的市场情景，帮助投资者理解「为什么会这样走」。\n\n"
-            "用「该账户」指代投资者，禁止出现任何人名。\n"
-            "输出风格：专业但易读，数据与分析并重，500~800字。\n"
-            "输出格式：纯文本分段，禁止使用任何 Markdown 格式（如 **加粗**、## 标题、- 列表等）。\n\n"
-            "输出结构（按段落撰写，不需要序号标记）：\n\n"
-            "第一段「买入时点」：买入当日个股处于什么技术位置（区间高低位），"
-            "成交量状态如何，大盘环境如何，结合可用资讯分析买入时的市场情绪。\n\n"
-            "第二段「持仓历程」：这是最核心的部分，需要识别持仓期间2-3个关键转折点，"
-            "说明股价为什么涨/跌（驱动因素），将相关资讯与股价变动建立因果联系。"
-            "描述成交量配合情况（放量上涨说明什么，缩量回调说明什么）。"
-            "同时对比大盘走势，分析个股是独立行情还是跟随大盘。\n\n"
-            "第三段「卖出时点」：卖出时股价距离区间最高点有多远，"
-            "是在上涨趋势中止盈还是在回调中离场，"
-            "卖出后股价的短期走势暗示了什么（如果有数据的话）。\n\n"
-            "第四段「交易复盘」：总结本次交易的整体表现——"
-            "是否抓住了主升浪，持仓期间最大浮亏和最大浮盈分别是多少，"
-            "这笔交易的风险收益比如何。\n\n"
-            "注意：不要生硬罗列数字，要像写分析报告一样自然地将数据融入叙述中。"
-            "禁止给出任何策略建议或操作评价。"
+            "你是A股交易复盘分析师。基于数据还原交易情景，帮助投资者理解走势背后的原因。\n\n"
+            "规则：\n"
+            "- 用「该账户」指代投资者，禁止人名\n"
+            "- 总字数 200~300 字，精炼扼要，每段 2-3 句\n"
+            "- 禁止 Markdown 格式（无 **、##、- 列表）\n"
+            "- 将数据自然融入叙述，不要罗列数字\n"
+            "- 禁止给出策略建议或操作评价\n\n"
+            "严格按以下 4 段输出，每段以【】标题开头：\n\n"
+            "【买入时点】买入时个股位于区间什么位置，大盘和量能状态如何，"
+            "结合资讯分析买入背景。\n\n"
+            "【持仓历程】识别 1-2 个关键转折点，说明驱动因素，"
+            "将资讯与股价变动建立因果联系。\n\n"
+            "【卖出时点】卖出价距区间高点的位置，"
+            "是趋势中止盈还是回调离场。\n\n"
+            "【交易复盘】总结风险收益比，"
+            "最大浮亏和最大浮盈各多少，最终兑现了多少。"
         )
 
         # K-line digest: keep key days rather than just head/tail
@@ -566,6 +684,8 @@ async def _generate_trade_review(
             f"【大盘参考】\n"
             f"{ctx['idx_summary'] or '暂无大盘数据'}\n"
             f"个股相对表现：{ctx['relative'] or '无法比较'}\n\n"
+            f"【板块参考】\n"
+            f"{ctx['sector_summary'] or '暂无板块数据'}\n\n"
             f"【持仓期间相关资讯】\n{news_text}"
         )
 
@@ -576,7 +696,7 @@ async def _generate_trade_review(
                 {"role": "user",   "content": user_msg},
             ],
             temperature=0.5,
-            max_tokens=4000,
+            max_tokens=1500,
         )
         choice = response.choices[0] if response.choices else None
         if choice:
@@ -605,84 +725,53 @@ def _fallback_review(
     hold_days: int,
     ctx: dict,
 ) -> str:
-    """Analytical fallback when LLM is unavailable."""
-    direction = "上涨" if sell_price > buy_price else "下跌"
+    """Structured fallback with 【】 section headers when LLM is unavailable."""
     result_word = "盈利" if pnl >= 0 else "亏损"
 
-    paragraphs: list[str] = []
+    sections: list[str] = []
 
-    # ── P1: Entry analysis ──
-    p1 = f"该账户以 {buy_price:.2f} 元买入{stock_name}。"
+    # ── 买入时点 ──
+    p1 = f"【买入时点】该账户以 {buy_price:.2f} 元买入{stock_name}"
     if ctx.get("buy_timing"):
-        p1 += f"买入价格{ctx['buy_timing']}，距持仓期间最低价 {ctx['period_low']:.2f} 元约 {ctx['buy_vs_low']:.1f}%。"
+        p1 += f"，买入价{ctx['buy_timing']}"
+    p1 += "。"
     if ctx.get("idx_summary"):
-        p1 += f"买入时，{ctx['idx_summary']}。"
-    paragraphs.append(p1)
+        p1 += f"同期{ctx['idx_summary']}。"
+    if ctx.get("sector_summary"):
+        p1 += f"{ctx['sector_summary']}。"
+    sections.append(p1)
 
-    # ── P2: Holding period analysis ──
-    p2 = ""
+    # ── 持仓历程 ──
+    p2 = f"【持仓历程】持仓 {hold_days} 个交易日，"
     if ctx.get("trend_desc"):
-        p2 += f"{ctx['trend_desc']}，"
-    p2 += f"持仓 {hold_days} 个交易日期间，股价在 {ctx['period_low']:.2f} ~ {ctx['period_high']:.2f} 元区间波动"
-    if ctx.get("vol_trend"):
-        p2 += f"，{ctx['vol_trend']}"
-    p2 += "。"
-
-    if ctx.get("max_drawdown") and ctx["max_drawdown"] < -3:
-        p2 += (
-            f"期间最大浮亏达 {ctx['max_drawdown']:.2f}%"
-            f"（{ctx['max_drawdown_date']}），"
-            f"这对持仓心态是一次考验。"
-        )
-    if ctx.get("max_float_gain") and ctx["max_float_gain"] > 5:
-        p2 += (
-            f"最大浮盈达 {ctx['max_float_gain']:.2f}%"
-            f"（{ctx['max_float_gain_date']}）。"
-        )
-
+        p2 += f"{ctx['trend_desc']}。"
+    else:
+        p2 += f"股价在 {ctx['period_low']:.2f} ~ {ctx['period_high']:.2f} 元区间波动。"
     key_events = ctx.get("key_events", [])
     if key_events:
-        event_strs = [
-            f"{e['date']}单日{e['type']}{abs(e['change_pct']):.2f}%"
-            for e in key_events[:2]
-        ]
-        p2 += f"期间关键行情节点：{'，'.join(event_strs)}。"
-
-    vol_spikes = ctx.get("vol_spikes", [])
-    if vol_spikes:
-        spike = vol_spikes[0]
-        p2 += f"{spike['date']}出现成交量异动，达到均量的{spike['ratio']}倍。"
-
+        e = key_events[0]
+        p2 += f"关键节点：{e['date']}{e['type']}{abs(e['change_pct']):.2f}%。"
     if ctx.get("relative"):
-        p2 += f"整体来看，个股表现{ctx['relative']}。"
+        p2 += f"个股表现{ctx['relative']}。"
+    sections.append(p2)
 
-    paragraphs.append(p2)
-
-    # ── P3: Exit analysis ──
-    p3 = f"最终以 {sell_price:.2f} 元卖出。"
+    # ── 卖出时点 ──
+    p3 = f"【卖出时点】以 {sell_price:.2f} 元卖出"
     if ctx.get("sell_timing"):
-        p3 += f"卖出价格{ctx['sell_timing']}，距持仓期间最高价 {ctx['period_high']:.2f} 元约 {ctx['sell_vs_high']:.1f}%。"
+        p3 += f"，{ctx['sell_timing']}"
+    p3 += "。"
     if ctx.get("max_float_gain") and ctx["max_float_gain"] > pnl_pct + 5:
-        p3 += f"相比期间最高浮盈 {ctx['max_float_gain']:.2f}%，最终兑现了 {pnl_pct:.2f}% 的收益，有一定回吐。"
-    paragraphs.append(p3)
+        p3 += f"最高浮盈 {ctx['max_float_gain']:.2f}%，最终兑现 {pnl_pct:.2f}%，有一定回吐。"
+    sections.append(p3)
 
-    # ── P4: Result summary ──
-    p4 = f"本次交易{result_word} {abs(pnl):.2f} 元，收益率 {pnl_pct:+.2f}%。"
+    # ── 交易复盘 ──
+    p4 = f"【交易复盘】本次交易{result_word} {abs(pnl):.2f} 元（{pnl_pct:+.2f}%）。"
+    if ctx.get("max_drawdown") and ctx["max_drawdown"] < -3:
+        p4 += f"期间最大浮亏 {ctx['max_drawdown']:.2f}%。"
     if pnl >= 0 and ctx.get("idx_chg") is not None:
         excess = pnl_pct - ctx["idx_chg"]
         if excess > 5:
-            p4 += f"超额收益 {excess:.2f}%，表现优异。"
-        elif excess > 0:
-            p4 += f"小幅跑赢大盘 {excess:.2f}%。"
-    paragraphs.append(p4)
+            p4 += f"超额收益 {excess:.2f}%。"
+    sections.append(p4)
 
-    # ── P5: News context (if relevant) ──
-    news_lines = ctx.get("news_lines", [])
-    if news_lines:
-        titles = [
-            line.split("] ", 1)[1] if "] " in line else line
-            for line in news_lines[:3]
-        ]
-        paragraphs.append("持仓期间相关资讯包括：" + "；".join(titles) + "。")
-
-    return "\n\n".join(paragraphs)
+    return "\n\n".join(sections)

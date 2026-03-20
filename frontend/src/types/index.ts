@@ -207,6 +207,8 @@ export interface TradeReviewResponse {
   hold_days: number
   kline: TradeKlineBar[]
   index_kline: IndexKlineBar[]
+  sector_kline: IndexKlineBar[]
+  sector_name: string
   news: TradeNewsItem[]
   status: 'generating' | 'completed' | 'failed'
   ai_review?: string | null

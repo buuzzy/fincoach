@@ -98,11 +98,11 @@ PERIOD_END   = date(2026, 3, 14)
 
 # ── Users ─────────────────────────────────────────────────────────────────────
 USERS = [
-    (1, "华泰****3821", "aggressive"),
-    (2, "招商****0712", "conservative"),
-    (3, "东财****5967", "emotional"),
-    (4, "中信****2483", "balanced"),
-    (5, "海通****8156", "balanced"),
+    (1, "华泰证券A****3821", "aggressive"),
+    (2, "华泰证券B****0712", "conservative"),
+    (3, "华泰证券C****5967", "emotional"),
+    (4, "华泰证券D****2483", "balanced"),
+    (5, "华泰证券E****8156", "balanced"),
 ]
 
 # ── flp-mktdata K-line fetch ──────────────────────────────────────────────────
@@ -370,7 +370,7 @@ def generate_trades(user_id: int, profile: str, kline_map: dict, rng: random.Ran
 
 
 def generate_zhaoxin_trades(user_id: int, kline_map: dict, rng: random.Random) -> list[dict]:
-    """6-8 trades for 海通****8156, guaranteed slow_stop_loss + chase_high patterns."""
+    """6-8 trades for 华泰证券E****8156, guaranteed slow_stop_loss + chase_high patterns."""
     available = list(kline_map.keys())
     stocks = rng.sample(available, k=min(2, len(available)))
     trades = []
