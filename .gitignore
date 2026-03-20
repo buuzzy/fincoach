@@ -42,3 +42,6 @@ frontend/.env.*.local
 htmlcov/
 .coverage
 .claude/
+
+# ── 本地文档（不上传）──────────────────────────────────
+docs/
