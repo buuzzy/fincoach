@@ -5,9 +5,9 @@ from typing import List, Optional
 
 class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./coach.db"
-    LLM_BASE_URL: str = "https://api.openai.com/v1"
+    LLM_BASE_URL: str = "https://api.deepseek.com"
     LLM_API_KEY: str = ""
-    LLM_MODEL: str = "gpt-4o-mini"
+    LLM_MODEL: str = "deepseek-chat"
 
     # QVeris — primary + up to 4 backup keys
     QVERIS_API_KEY: str = ""

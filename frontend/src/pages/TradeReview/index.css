@@ -187,11 +187,27 @@
 
 /* ── AI review ── */
 .tr-ai-review {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.tr-ai-paragraph {
   font-size: 14px;
   color: var(--text-primary);
   line-height: 1.8;
   margin: 0;
-  white-space: pre-wrap;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border-color, #f0f0f0);
+}
+
+.tr-ai-paragraph:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.tr-ai-paragraph:first-child {
+  padding-top: 0;
 }
 
 .tr-empty-text {

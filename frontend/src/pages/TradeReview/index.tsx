@@ -314,12 +314,17 @@ export default function TradeReview() {
             {review.status === 'failed' || !review.ai_review ? (
               <p className="tr-empty-text">AI 分析暂时不可用</p>
             ) : (
-              <p className="tr-ai-review">{
-                review.ai_review
+              <div className="tr-ai-review">
+                {review.ai_review
                   .replace(/#{1,6}\s?/g, '')
                   .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')
                   .replace(/^[-*]\s/gm, '')
-              }</p>
+                  .split(/\n{2,}/)
+                  .filter(p => p.trim())
+                  .map((paragraph, idx) => (
+                    <p key={idx} className="tr-ai-paragraph">{paragraph.trim()}</p>
+                  ))}
+              </div>
             )}
           </div>
         </div>
