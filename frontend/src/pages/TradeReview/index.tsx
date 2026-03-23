@@ -5,6 +5,7 @@ import * as echarts from 'echarts'
 import dayjs from 'dayjs'
 import { getTradeReview } from '../../services/api'
 import GeneratingProgress from '../../components/GeneratingProgress'
+import ExportFooter from '../../components/ExportFooter'
 import type { ProgressStep } from '../../components/GeneratingProgress'
 import type { TradeReviewResponse } from '../../types'
 import './index.css'
@@ -306,10 +307,24 @@ export default function TradeReview() {
   const [review, setReview] = useState<TradeReviewResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [exportMode, setExportMode] = useState(false)
+  const [collapseKeys, setCollapseKeys] = useState<string[]>([])
   const startedAtRef = useRef(Date.now())
+  const contentRef = useRef<HTMLDivElement>(null)
 
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstance = useRef<echarts.ECharts | null>(null)
+
+  const handleBeforeExport = useCallback(async () => {
+    setCollapseKeys(['daily', 'news'])
+    setExportMode(true)
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 300)))
+  }, [])
+
+  const handleAfterExport = useCallback(() => {
+    setExportMode(false)
+    setCollapseKeys([])
+  }, [])
 
   useEffect(() => {
     if (!buyTradeId || !sellTradeId) return
@@ -499,7 +514,16 @@ export default function TradeReview() {
       )}
 
       {!loading && !error && review && (
-        <div className="tr-content">
+        <div className={`tr-content${exportMode ? ' export-mode' : ''}`} ref={contentRef}>
+          {exportMode && (
+            <div className="export-brand-header">
+              <div className="export-brand-title">TradeMind AI</div>
+              <div className="export-brand-sub">
+                单笔交易复盘 · {review.stock_name}({review.stock_code})
+                 · {dayjs(review.buy_time).format('YYYY.MM.DD')} ~ {dayjs(review.sell_time).format('YYYY.MM.DD')}
+              </div>
+            </div>
+          )}
           {/* ── 基本信息卡 ── */}
           <div className="tr-card tr-header-card">
             <div className="tr-stock-row">
@@ -619,7 +643,10 @@ export default function TradeReview() {
           </div>
 
           {/* ── 逐日行情明细 + 资讯（可收起） ── */}
-          <Collapse defaultActiveKey={[]}>
+          <Collapse
+            activeKey={exportMode ? ['daily', 'news'] : collapseKeys}
+            onChange={(keys) => { if (!exportMode) setCollapseKeys(keys as string[]) }}
+          >
             {holdingBars.length > 0 && (
               <Collapse.Panel
                 key="daily"
@@ -680,6 +707,23 @@ export default function TradeReview() {
               )}
             </Collapse.Panel>
           </Collapse>
+
+          {/* Export watermark (only visible during export capture) */}
+          {exportMode && (
+            <div className="export-watermark">
+              生成于 {new Date().toLocaleDateString('zh-CN')} · TradeMind AI
+            </div>
+          )}
+
+          {/* Export button (hidden during capture) */}
+          {!exportMode && (
+            <ExportFooter
+              contentRef={contentRef}
+              filename={`TradeMind_单笔复盘_${review.stock_name}`}
+              onBeforeExport={handleBeforeExport}
+              onAfterExport={handleAfterExport}
+            />
+          )}
         </div>
       )}
     </div>

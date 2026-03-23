@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { NavBar, Toast, Card, Tag, Divider } from 'antd-mobile'
 import { getReport, generateReport, type GenerateReportPayload } from '../../services/api'
@@ -10,6 +10,7 @@ import PatternSwiper from '../../components/PatternCard/PatternSwiper'
 import BacktestSwiper from '../../components/Charts/BacktestSwiper'
 import PnlChart from '../../components/Charts/PnlChart'
 import GeneratingProgress from '../../components/GeneratingProgress'
+import ExportFooter from '../../components/ExportFooter'
 import './index.css'
 
 /**
@@ -57,10 +58,21 @@ export default function Report() {
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string>('')
+  const [exportMode, setExportMode] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollCountRef = useRef(0)
   const startedAtRef = useRef<number>(Date.now())
   const MAX_POLL_COUNT = 60
+
+  const handleBeforeExport = useCallback(async () => {
+    setExportMode(true)
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 300)))
+  }, [])
+
+  const handleAfterExport = useCallback(() => {
+    setExportMode(false)
+  }, [])
 
   useEffect(() => {
     // ── Pending mode: id === 'pending', need to call generate first ──
@@ -145,7 +157,19 @@ export default function Report() {
         )}
       </NavBar>
 
-      <div className="report-content">
+      <div className={`report-content${exportMode ? ' export-mode' : ''}`} ref={contentRef}>
+        {exportMode && report && (
+          <div className="export-brand-header">
+            <div className="export-brand-title">TradeMind AI</div>
+            <div className="export-brand-sub">
+              交易复盘报告 · {account ? `${account.brokerName} ${account.maskedAccount}` : ''}
+              {report.period_start && report.period_end
+                ? ` · ${report.period_start} ~ ${report.period_end}`
+                : ''}
+            </div>
+          </div>
+        )}
+
         {(loading || fetchError || report?.status === 'failed') && report?.status !== 'completed' ? (
           <GeneratingProgress
             startedAt={startedAtRef.current}
@@ -225,7 +249,7 @@ export default function Report() {
             {report.patterns && report.patterns.length > 0 && (
               <section className="report-section">
                 <h3 className="section-title">检测到的交易模式</h3>
-                <PatternSwiper patterns={report.patterns} />
+                <PatternSwiper patterns={report.patterns} flat={exportMode} />
               </section>
             )}
 
@@ -281,6 +305,7 @@ export default function Report() {
                   <BacktestSwiper
                     scenarios={effectiveScenarios}
                     bestScenario={bestEffective}
+                    flat={exportMode}
                   />
                 </section>
               )
@@ -302,6 +327,23 @@ export default function Report() {
                   <SuggestionList text={report.ai_suggestions} />
                 </Card>
               </section>
+            )}
+
+            {/* Export watermark (only visible during export capture) */}
+            {exportMode && (
+              <div className="export-watermark">
+                生成于 {new Date().toLocaleDateString('zh-CN')} · TradeMind AI
+              </div>
+            )}
+
+            {/* Export button (hidden during capture) */}
+            {!exportMode && (
+              <ExportFooter
+                contentRef={contentRef}
+                filename={`TradeMind_复盘报告_${account?.maskedAccount ?? id}`}
+                onBeforeExport={handleBeforeExport}
+                onAfterExport={handleAfterExport}
+              />
             )}
           </>
         ) : (

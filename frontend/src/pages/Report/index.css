@@ -180,3 +180,38 @@
 .positive {
   color: var(--success-color);
 }
+
+/* ── Export mode ── */
+
+.export-brand-header {
+  text-align: center;
+  padding: 20px 0 16px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 16px;
+}
+
+.export-brand-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--primary-color);
+  letter-spacing: 1px;
+}
+
+.export-brand-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+
+.export-watermark {
+  text-align: center;
+  padding: 20px 0 8px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  border-top: 1px solid var(--border-color);
+  margin-top: 16px;
+}
+
+.report-content.export-mode {
+  background: #ffffff;
+}

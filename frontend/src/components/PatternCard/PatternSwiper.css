@@ -151,6 +151,20 @@
   color: var(--text-tertiary);
 }
 
+/* ── Flat mode (export) ── */
+.pattern-flat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pattern-flat-list > .pattern-slide {
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  padding: 14px 16px 10px;
+}
+
 /* colour helpers */
 .positive { color: var(--profit-color); }
 .negative { color: var(--loss-color); }

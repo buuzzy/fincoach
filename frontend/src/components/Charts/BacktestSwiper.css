@@ -138,6 +138,19 @@
   border-left: 3px solid var(--success-color);
 }
 
+/* ── Flat mode (export) ── */
+.backtest-flat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.backtest-flat-list > .backtest-slide {
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+}
+
 /* colour helpers */
 .bt-positive { color: var(--profit-color); }
 .bt-negative { color: var(--loss-color); }

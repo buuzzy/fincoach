@@ -7,6 +7,7 @@ import './PatternSwiper.css'
 
 interface Props {
   patterns: PatternResult[]
+  flat?: boolean
 }
 
 const patternColorMap: Record<string, string> = {
@@ -25,11 +26,97 @@ const patternIconMap: Record<string, string> = {
   fee_drag: '💸',
 }
 
-export default function PatternSwiper({ patterns }: Props) {
+export default function PatternSwiper({ patterns, flat = false }: Props) {
   const navigate = useNavigate()
   const [activeIndex, setActiveIndex] = useState(0)
 
   if (!patterns || patterns.length === 0) return null
+
+  const renderSlide = (pattern: PatternResult, slideIdx: number) => {
+    const color = patternColorMap[pattern.pattern_type] ?? '#999'
+    const icon = patternIconMap[pattern.pattern_type] ?? '🔍'
+
+    const example = (pattern.examples as PatternExampleBase[]).find(
+      (ex) => ex.buy_date && ex.sell_date,
+    )
+
+    const pnlVal = typeof example?.pnl === 'number' ? example.pnl : null
+
+    return (
+      <div className="pattern-slide" key={pattern.pattern_type}>
+        <div className="pattern-slide-header">
+          <div className="pattern-slide-title">
+            <span className="pattern-slide-icon">{icon}</span>
+            <span className="pattern-slide-name">{pattern.pattern_name}</span>
+            <Tag
+              style={{
+                '--background-color': color,
+                '--text-color': '#fff',
+                '--border-color': color,
+                marginLeft: 6,
+              }}
+              round
+            >
+              {pattern.occurrences}次
+            </Tag>
+          </div>
+          <div className="pattern-slide-impact">
+            影响{' '}
+            <span className={pattern.total_impact >= 0 ? 'positive' : 'negative'}>
+              {pattern.total_impact >= 0 ? '+' : ''}
+              {pattern.total_impact.toFixed(0)}元
+            </span>
+          </div>
+        </div>
+
+        <p className="pattern-slide-desc">{pattern.description}</p>
+
+        {example ? (
+          <>
+            <div className="pattern-slide-trade-label">
+              {example.stock} &nbsp;·&nbsp; {example.buy_date} → {example.sell_date}
+              {pnlVal !== null && (
+                <span className={pnlVal >= 0 ? 'positive' : 'negative'}>
+                  &nbsp;{pnlVal >= 0 ? '+' : ''}{pnlVal.toFixed(0)}元
+                </span>
+              )}
+            </div>
+            <KLineCard
+              example={example}
+              aiCommentary={pattern.ai_commentary}
+              active={flat || activeIndex === slideIdx}
+            />
+            {!flat && example.buy_trade_id && example.sell_trade_id && (
+              <div
+                className="pattern-review-link"
+                onClick={() => navigate(`/trade-review/${example.buy_trade_id}/${example.sell_trade_id}`)}
+              >
+                查看详细复盘 &gt;
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="pattern-no-kline">
+            {pattern.ai_commentary ? (
+              <div className="kline-ai-commentary">💡 {pattern.ai_commentary}</div>
+            ) : (
+              <div className="pattern-no-kline-hint">
+                该模式暂无典型 K 线案例
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (flat) {
+    return (
+      <div className="pattern-flat-list">
+        {patterns.map((p, i) => renderSlide(p, i))}
+      </div>
+    )
+  }
 
   return (
     <div className="pattern-swiper-wrapper">
@@ -46,89 +133,11 @@ export default function PatternSwiper({ patterns }: Props) {
           </div>
         )}
       >
-        {patterns.map((pattern, slideIdx) => {
-          const color = patternColorMap[pattern.pattern_type] ?? '#999'
-          const icon = patternIconMap[pattern.pattern_type] ?? '🔍'
-
-          // Pick the best example (first after sorting by abs pnl, already done backend-side)
-          const example = (pattern.examples as PatternExampleBase[]).find(
-            (ex) => ex.buy_date && ex.sell_date,
-          )
-
-          const pnlVal = typeof example?.pnl === 'number' ? example.pnl : null
-
-          return (
-            <Swiper.Item key={pattern.pattern_type}>
-              <div className="pattern-slide">
-                {/* Header */}
-                <div className="pattern-slide-header">
-                  <div className="pattern-slide-title">
-                    <span className="pattern-slide-icon">{icon}</span>
-                    <span className="pattern-slide-name">{pattern.pattern_name}</span>
-                    <Tag
-                      style={{
-                        '--background-color': color,
-                        '--text-color': '#fff',
-                        '--border-color': color,
-                        marginLeft: 6,
-                      }}
-                      round
-                    >
-                      {pattern.occurrences}次
-                    </Tag>
-                  </div>
-                  <div className="pattern-slide-impact">
-                    影响{' '}
-                    <span className={pattern.total_impact >= 0 ? 'positive' : 'negative'}>
-                      {pattern.total_impact >= 0 ? '+' : ''}
-                      {pattern.total_impact.toFixed(0)}元
-                    </span>
-                  </div>
-                </div>
-
-                {/* Description */}
-                <p className="pattern-slide-desc">{pattern.description}</p>
-
-                {/* K-line chart — only for patterns with date info */}
-                {example ? (
-                  <>
-                    <div className="pattern-slide-trade-label">
-                      {example.stock} &nbsp;·&nbsp; {example.buy_date} → {example.sell_date}
-                      {pnlVal !== null && (
-                        <span className={pnlVal >= 0 ? 'positive' : 'negative'}>
-                          &nbsp;{pnlVal >= 0 ? '+' : ''}{pnlVal.toFixed(0)}元
-                        </span>
-                      )}
-                    </div>
-                    <KLineCard
-                      example={example}
-                      aiCommentary={pattern.ai_commentary}
-                      active={activeIndex === slideIdx}
-                    />
-                    {example.buy_trade_id && example.sell_trade_id && (
-                      <div
-                        className="pattern-review-link"
-                        onClick={() => navigate(`/trade-review/${example.buy_trade_id}/${example.sell_trade_id}`)}
-                      >
-                        查看详细复盘 &gt;
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="pattern-no-kline">
-                    {pattern.ai_commentary ? (
-                      <div className="kline-ai-commentary">💡 {pattern.ai_commentary}</div>
-                    ) : (
-                      <div className="pattern-no-kline-hint">
-                        该模式暂无典型 K 线案例
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </Swiper.Item>
-          )
-        })}
+        {patterns.map((pattern, slideIdx) => (
+          <Swiper.Item key={pattern.pattern_type}>
+            {renderSlide(pattern, slideIdx)}
+          </Swiper.Item>
+        ))}
       </Swiper>
     </div>
   )

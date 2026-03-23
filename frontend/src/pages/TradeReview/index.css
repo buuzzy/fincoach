@@ -245,3 +245,38 @@
   padding: 8px 0;
 }
 
+/* ── Export mode ── */
+
+.tr-content .export-brand-header {
+  text-align: center;
+  padding: 20px 0 16px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 4px;
+}
+
+.tr-content .export-brand-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--primary-color);
+  letter-spacing: 1px;
+}
+
+.tr-content .export-brand-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+
+.tr-content .export-watermark {
+  text-align: center;
+  padding: 20px 0 8px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  border-top: 1px solid var(--border-color);
+  margin-top: 4px;
+}
+
+.tr-content.export-mode {
+  background: #ffffff;
+}
+
