@@ -1,4 +1,4 @@
-"""Structured logging configuration for TraderCoach backend.
+"""Structured logging configuration for TradeMind backend.
 
 Sets up:
 - JSON formatter for file handler (machine-readable, good for log aggregators)

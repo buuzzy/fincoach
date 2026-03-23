@@ -1,4 +1,4 @@
-"""Basic tests for the TraderCoach backend."""
+"""Basic tests for the TradeMind backend."""
 
 import asyncio
 import os

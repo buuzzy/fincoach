@@ -44,7 +44,7 @@ python scripts/seed_supabase.py --news-only # 仅补种资讯
 - `backend/app/api/trades.py` — 单笔复盘 + 情景还原（含 LLM prompt）
 - `backend/app/services/ai_agent.py` — 复盘报告生成（含 LLM Agent 流程）
 - `backend/scripts/seed_supabase.py` — Supabase 数据补种脚本
-- `docs/PRD.md` — 产品需求文档（v1.5）
+- `docs/` — 产品需求文档等（仅本地，不提交到仓库）
 
 ## 环境变量 (backend/.env)
 ```

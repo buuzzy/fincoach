@@ -84,8 +84,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="TraderCoach",
-    description="AI-powered trading behaviour analysis and coaching for A-share retail investors",
+    title="TradeMind AI",
+    description="AI-powered trading replay analysis for A-share retail investors",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -130,4 +130,4 @@ app.include_router(trades_router)
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "service": "TraderCoach"}
+    return {"status": "ok", "service": "TradeMind"}
