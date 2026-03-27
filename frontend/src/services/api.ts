@@ -49,7 +49,7 @@ function toApiError(err: unknown): ApiError {
 
 // ── Axios 实例 ───────────────────────────────────────────────────────────────
 
-// 生产环境：VITE_API_BASE_URL=https://fincoach-backend.onrender.com
+// 生产环境：VITE_API_BASE_URL=https://api.trademind.nakocai.com
 // 开发环境：空字符串，走 vite proxy → localhost:8000
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '') + '/api'
 

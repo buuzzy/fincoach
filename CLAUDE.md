@@ -11,7 +11,7 @@
 - **行情数据**: QVeris API（实时 + 历史 K 线）
 - **资讯数据**: Finloop News API
 - **构建**: Vite (前端) + uvicorn (后端)
-- **部署**: Cloudflare Pages (前端) + Render (后端)
+- **部署**: Cloudflare Pages (前端) + Google Cloud Run (后端)
 
 ## 开发命令
 
@@ -66,5 +66,6 @@ QVERIS_API_KEY=sk-xxx
 
 ## 线上地址
 - 前端：https://fincoach-aee.pages.dev
-- 后端：https://fincoach-backend.onrender.com
-- API 文档：https://fincoach-backend.onrender.com/docs
+- 前端：https://trademind.nakocai.com
+- 后端：https://api.trademind.nakocai.com
+- API 文档：https://api.trademind.nakocai.com/docs

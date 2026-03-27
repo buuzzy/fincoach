@@ -179,8 +179,9 @@ python scripts/seed_supabase.py --index-only  # 仅补种上证指数
 | 服务 | 地址 |
 |------|------|
 | 前端 | https://fincoach-aee.pages.dev |
-| 后端 API | https://fincoach-backend.onrender.com |
-| API 文档 | https://fincoach-backend.onrender.com/docs |
+| 前端 | https://trademind.nakocai.com |
+| 后端 API | https://api.trademind.nakocai.com |
+| API 文档 | https://api.trademind.nakocai.com/docs |
 
 ## License
 

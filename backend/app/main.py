@@ -111,6 +111,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://trademind.nakocai.com",
         "https://fincoach-aee.pages.dev",
         "http://localhost:5173",
         "http://localhost:4173",
